@@ -40,6 +40,7 @@ setup(
             'camera_recognition_node = pincher_control.camera_recognition_node:main',
             'recognition_node = pincher_control.recognition_node:main',
             'scene_objects = pincher_control.scene_objects_node:main',
+            'pincher_gui = pincher_control.gui_node:main',
             'pose_search = pincher_control.pose_search_node:main',
             'routine_manager = pincher_control.routine_manager:main',
         ],
