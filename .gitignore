@@ -1,0 +1,19 @@
+# ROS 2 build artifacts
+phantom_ws/build/
+phantom_ws/install/
+phantom_ws/log/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.eggs/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
