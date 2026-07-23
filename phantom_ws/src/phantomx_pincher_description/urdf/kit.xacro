@@ -271,6 +271,27 @@
 
 
   <!-- ============================= -->
+  <!-- 📷 Soporte de Cámara -->
+  <!-- ============================= -->
+  <link name="soporteCamara_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 -${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/ensambleSoporteCamara.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+  </link>
+
+  <joint name="base_soporteCamara_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="soporteCamara_link" />
+    <origin xyz="0.26 0.0 0.009" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- ============================= -->
   <!-- 🌍 Global Rotation Wrapper -->
   <!-- ============================= -->
   <link name="world_link"/>
