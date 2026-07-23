@@ -78,6 +78,7 @@ class GuiRosNode(Node):
         self.figure_pub = self.create_publisher(String, "/figure_type", 10)
         self.gripper_pub = self.create_publisher(Bool, "/set_gripper", 10)
         self.busy_pub = self.create_publisher(Bool, "/routine_busy", 10)
+        self.estop_pub = self.create_publisher(Bool, "/emergency_stop", 10)
 
         # Subscribers
         self.figure_state_sub = self.create_subscription(
@@ -123,10 +124,14 @@ class GuiRosNode(Node):
         self.gripper_pub.publish(msg)
 
     def publish_emergency_stop(self):
-        """Publica busy=False para liberar FSM y detener."""
+        """Publica señal de parada de emergencia."""
         msg = Bool()
-        msg.data = False
-        self.busy_pub.publish(msg)
+        msg.data = True
+        self.estop_pub.publish(msg)
+        # También liberar busy
+        busy_msg = Bool()
+        busy_msg.data = False
+        self.busy_pub.publish(busy_msg)
 
 
 class PincherGUI:

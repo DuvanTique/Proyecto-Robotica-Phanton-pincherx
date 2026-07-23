@@ -221,12 +221,27 @@ class PincherFollowJointTrajectory(Node):
             10
         )
 
+        # -------------- Emergency Stop --------------
+        self.estop_sub = self.create_subscription(
+            Bool,
+            "/emergency_stop",
+            self.emergency_stop_callback,
+            10
+        )
+
         self.get_logger().info(
             "Action servers FollowJointTrajectory listos en:\n"
             "  - /joint_trajectory_controller/follow_joint_trajectory (brazo)\n"
             "  - /gripper_trajectory_controller/follow_joint_trajectory (gripper)\n"
             "Direct gripper control ready on: /set_gripper"
         )
+
+    def emergency_stop_callback(self, msg: Bool):
+        """Parada de emergencia: desactiva torque en todos los servos."""
+        if msg.data:
+            self.get_logger().error("🚨 EMERGENCY STOP: Deshabilitando torque de todos los servos")
+            for joint_name, dxl_id in self.joint_to_id.items():
+                self.packet.write1ByteTxRx(self.port, dxl_id, ADDR_TORQUE_ENABLE, 0)
 
     def set_gripper_callback(self, msg: Bool):
         """

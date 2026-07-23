@@ -127,6 +127,14 @@ class ClasificadorNode(Node):
         # Publicador de estado ocupado para pausar YOLO durante la rutina
         self.busy_pub = self.create_publisher(Bool, "/routine_busy", 10)
 
+        # Suscriptor de parada de emergencia
+        self.estop_sub = self.create_subscription(
+            Bool,
+            "/emergency_stop",
+            self.emergency_stop_callback,
+            10,
+        )
+
         # Timer para ejecutar la secuencia paso a paso
         self.sequence_timer = None
 
@@ -412,6 +420,15 @@ class ClasificadorNode(Node):
 
         self.current_state = SequenceState.MOVING_TO_HOME_START
         self.execute_sequence_step()
+
+    def emergency_stop_callback(self, msg: Bool) -> None:
+        """Callback para parada de emergencia. Aborta la secuencia inmediatamente."""
+        if msg.data:
+            self.get_logger().error("🚨 PARADA DE EMERGENCIA RECIBIDA")
+            if self.current_state != SequenceState.IDLE:
+                self.abort_sequence()
+            # Abrir gripper por seguridad
+            self.control_gripper(True)
 
     def figure_callback(self, msg: String) -> None:
         """Callback para el tópico /figure_type."""
