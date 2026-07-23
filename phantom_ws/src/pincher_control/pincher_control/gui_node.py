@@ -293,7 +293,11 @@ class PincherGUI:
     def _on_stop(self):
         self.auto_mode = False
         self.fsm_state = "IDLE"
-        self.status_var.set("Ciclo detenido por el operador.")
+        # Enviar señal al clasificador para que aborte la secuencia en curso
+        msg = Bool()
+        msg.data = True
+        self.node.estop_pub.publish(msg)
+        self.status_var.set("Ciclo detenido. Secuencia abortada.")
         self._update_state_display()
 
     def _on_estop(self):
@@ -302,7 +306,7 @@ class PincherGUI:
         self.fsm_state = "FAULT"
         self.node.publish_emergency_stop()
         self.node.publish_gripper(True)  # Abrir gripper por seguridad
-        self.status_var.set("⚠️  PARADA DE EMERGENCIA ACTIVADA")
+        self.status_var.set("⚠️  PARADA DE EMERGENCIA ACTIVADA — Torque deshabilitado")
         self._update_state_display()
 
     def _on_reset(self):
@@ -369,8 +373,8 @@ class PincherGUI:
         detected = self.node.current_figure_state
         self.detection_var.set(detected if detected else "---")
 
-        # Update FSM state based on busy
-        if self.node.is_busy and self.fsm_state not in ("FAULT", "DONE"):
+        # Update FSM state based on busy — but only if GUI is in auto/active mode
+        if self.node.is_busy and self.fsm_state not in ("FAULT", "DONE", "IDLE"):
             self.fsm_state = "PICK"
         elif not self.node.is_busy and self.fsm_state == "PICK":
             self.fsm_state = "SCAN" if self.auto_mode else "IDLE"
@@ -410,8 +414,8 @@ class PincherGUI:
         # Update camera image
         self._update_camera_image()
 
-        # Auto-mode: trigger next cube when idle
-        if self.auto_mode and not self.node.is_busy and not self.is_fault:
+        # Auto-mode: trigger next cube ONLY when in SCAN state and not busy
+        if self.auto_mode and self.fsm_state == "SCAN" and not self.node.is_busy and not self.is_fault:
             if detected in FIGURE_MAP and self.classified_count[detected] < RECIPE[detected]:
                 self.node.publish_figure(detected)
                 self.fsm_state = "PLAN"
