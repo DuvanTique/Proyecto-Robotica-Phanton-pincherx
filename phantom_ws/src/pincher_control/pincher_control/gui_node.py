@@ -80,6 +80,12 @@ class GuiRosNode(Node):
         self.busy_pub = self.create_publisher(Bool, "/routine_busy", 10)
         self.estop_pub = self.create_publisher(Bool, "/emergency_stop", 10)
 
+        # Publisher para enviar comandos directos de joints al commander
+        from example_interfaces.msg import Float64MultiArray
+        from phantomx_pincher_interfaces.msg import PoseCommand
+        self.joint_cmd_pub = self.create_publisher(Float64MultiArray, "/joint_command", 10)
+        self.pose_cmd_pub = self.create_publisher(PoseCommand, "/pose_command", 10)
+
         # Subscribers
         self.figure_state_sub = self.create_subscription(
             String, "/figure_state", self._figure_state_cb, 10
@@ -117,6 +123,26 @@ class GuiRosNode(Node):
         msg = String()
         msg.data = figure
         self.figure_pub.publish(msg)
+
+    def publish_home(self):
+        """Envía joint_command con articulaciones en posición home (1°)."""
+        from example_interfaces.msg import Float64MultiArray
+        msg = Float64MultiArray()
+        msg.data = [0.01745, 0.01745, 0.01745, 0.01745]
+        self.joint_cmd_pub.publish(msg)
+
+    def publish_pose(self, x, y, z, roll, pitch, yaw):
+        """Envía un PoseCommand al commander."""
+        from phantomx_pincher_interfaces.msg import PoseCommand
+        msg = PoseCommand()
+        msg.x = float(x)
+        msg.y = float(y)
+        msg.z = float(z)
+        msg.roll = float(roll)
+        msg.pitch = float(pitch)
+        msg.yaw = float(yaw)
+        msg.cartesian_path = False
+        self.pose_cmd_pub.publish(msg)
 
     def publish_gripper(self, open_gripper: bool):
         msg = Bool()
@@ -312,18 +338,17 @@ class PincherGUI:
     def _on_reset(self):
         self.is_fault = False
         self.fsm_state = "IDLE"
-        self.status_var.set("Fallas limpiadas. Sistema en espera.")
+        # Enviar robot a home al hacer reset
+        self.node.publish_home()
+        self.status_var.set("Fallas limpiadas. Robot enviado a HOME.")
         self._update_state_display()
 
     def _on_home(self):
         if self.is_fault:
             self.status_var.set("⚠️  Sistema en FAULT. Haga Reset primero.")
             return
-        self.status_var.set("Enviando robot a HOME...")
-        # Publicar una figura vacía no dispara la FSM, usamos joint_command
-        # En este caso simplemente publicamos como si detectara "home"
-        # El commander tiene fallback a joints=[0.01745, ...]
-        self.node.publish_figure("__home__")  # No reconocido, no dispara FSM
+        self.node.publish_home()
+        self.status_var.set("🏠 Robot enviado a posición HOME.")
 
     def _on_scan(self):
         if self.is_fault:
