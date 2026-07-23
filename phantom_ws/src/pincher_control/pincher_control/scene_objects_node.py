@@ -49,7 +49,7 @@ class SceneObjectsNode(Node):
         box.type = SolidPrimitive.BOX
         box.dimensions = [0.60, 0.60, 0.02]  # 60x60cm, 2cm de grosor
         pose_mesa = Pose()
-        pose_mesa.position = Point(x=0.0, y=0.0, z=-0.01)  # justo debajo de la base
+        pose_mesa.position = Point(x=0.0, y=0.0, z=0.0)  # justo debajo de la base
         pose_mesa.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
         mesa.primitives.append(box)
         mesa.primitive_poses.append(pose_mesa)
@@ -86,7 +86,7 @@ class SceneObjectsNode(Node):
             obj.operation = CollisionObject.ADD
             cyl = SolidPrimitive()
             cyl.type = SolidPrimitive.BOX
-            cyl.dimensions = [0.18, 0.12, 0.08]  # 18x12cm, 8cm de alto
+            cyl.dimensions = [0.18, 0.12, 0.06]  # 18x12cm, 8cm de alto
             pose_c = Pose()
             pose_c.position = Point(x=cx, y=cy, z=cz)
             pose_c.orientation = Quaternion(
@@ -106,9 +106,9 @@ class SceneObjectsNode(Node):
         camara.operation = CollisionObject.ADD
         cyl_cam = SolidPrimitive()
         cyl_cam.type = SolidPrimitive.CYLINDER
-        cyl_cam.dimensions = [0.30, 0.02]  # 30cm alto, 2cm radio
+        cyl_cam.dimensions = [0.60, 0.03]  # 30cm alto, 2cm radio
         pose_cam = Pose()
-        pose_cam.position = Point(x=0.26, y=0.0, z=0.15)
+        pose_cam.position = Point(x=0.26, y=0.0, z=0.30)
         pose_cam.orientation = Quaternion(x=0.0, y=0.0, z=0.0, w=1.0)
         camara.primitives.append(cyl_cam)
         camara.primitive_poses.append(pose_cam)
