@@ -1,0 +1,292 @@
+<?xml version="1.0"?>
+<!-- URDF for PhantomX Pincher Kit with Global Rotation -->
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="kit">
+
+  <!-- ============================= -->
+  <!-- 🔧 Global Properties -->
+  <!-- ============================= -->
+  <xacro:property name="PI" value="3.141592653589793" />
+
+  <!-- 🧭 Global rotation (rpy) applied to the whole model -->
+  <!-- 0 0 0     → normal top view
+       ${PI} 0 0 → upside-down bottom view -->
+  <xacro:property name="global_rotation_rpy" value="0 -${PI/2} 0" />
+
+
+  <!-- ============================= -->
+  <!-- 🎨 Global Material Definitions -->
+  <!-- ============================= -->
+  <material name="black"><color rgba="0 0 0 1"/></material>
+  <material name="gray"><color rgba="0.5 0.5 0.5 1"/></material>
+  <material name="white"><color rgba="1 1 1 1"/></material>
+  <material name="yellow"><color rgba="1 1 0 1"/></material>
+  <material name="green"><color rgba="0 1 0 1"/></material>
+  <material name="red"><color rgba="1 0 0 1"/></material>
+  <material name="blue"><color rgba="0 0 1 1"/></material>
+  <material name="purple"><color rgba="0.5 0 0.5 1"/></material>
+
+
+  <!-- ============================= -->
+  <!-- 🧱 Robot Geometry -->
+  <!-- ============================= -->
+  <link name="baseFija_link">
+    <visual>
+      <origin xyz="0.155 0 0.000" rpy="0 0 -${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/baseElementosFijos.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="black" />
+    </visual>
+    <collision>
+      <origin xyz="0.155 0 0.0045" rpy="0 0 -${PI/2}" />
+      <geometry>
+        <box size="0.360 0.554 0.009" />
+      </geometry>
+      <material name="black" />
+    </collision>
+  </link>
+
+  <link name="caseBaseRobot_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="${PI} 0 ${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/caseBaseRobot.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+    <collision>
+        <origin xyz="0 0 -0.024" rpy="${PI} 0 ${PI/2}" />
+        <geometry>
+            <box size="0.066 0.074 0.048" />
+        </geometry>
+        <material name="gray" />
+    </collision>
+  </link>
+
+  <joint name="base_caseRobot_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="caseBaseRobot_link" />
+    <origin xyz="-0.01325 0 0.054" rpy="0 0 0" />
+  </joint>
+
+  <link name="zonaRecoleccion_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="${PI} 0 0" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/zonaCircular146mm.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="white" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.003" rpy="${PI} 0 0" />
+      <geometry>
+        <cylinder radius="0.073" length="0.006" />
+      </geometry>
+      <material name="white" />
+    </collision>
+  </link>
+
+  <joint name="base_zonaRecoleccion_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="zonaRecoleccion_link" />
+    <origin xyz="0.096 0 0.015" rpy="0 0 0" />
+  </joint>
+
+  <link name="airpump_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="${PI/2} 0 -${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/ensambleAirpump.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+    <collision>
+      <origin xyz="-0.0647 0 0.014" rpy="${PI/2} 0 -${PI/2}" />
+      <geometry>
+        <box size="0.062 0.0405 0.067" />
+      </geometry>
+      <material name="gray" />
+    </collision>
+  </link>
+
+  <joint name="base_airpump_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="airpump_link" />
+    <origin xyz="0 0 0.009" rpy="0 0 0" />
+  </joint>
+
+  <link name="manijaTrasera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="-${PI/2} 0 ${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/manija.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+    <collision>
+      <origin xyz="-0.010 0 0" rpy="-${PI/2} 0 ${PI/2}" />
+      <geometry>
+        <box size="0.136 0.0505 0.020" />
+      </geometry>
+      <material name="gray" />
+    </collision>
+  </link>
+
+  <joint name="base_manijaTrasera_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="manijaTrasera_link" />
+    <origin xyz="-0.102 0 0.03425" rpy="0 0 0" />
+  </joint>
+
+  <link name="manijaDelantera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="-${PI/2} 0 ${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/manija.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="gray" />
+    </visual>
+    <collision>
+      <origin xyz="-0.010 0 0" rpy="-${PI/2} 0 ${PI/2}" />
+      <geometry>
+        <box size="0.136 0.0505 0.020" />
+      </geometry>
+      <material name="gray" />
+    </collision>
+  </link>
+
+  <joint name="base_manijaDelantera_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="manijaDelantera_link" />
+    <origin xyz="0.432 0 0.03425" rpy="0 0 0" />
+  </joint>
+
+  <link name="canecaLateralIzquierda_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 -${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/canecaGrande.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="red" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 -${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/canecaGrande.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="red" />        
+    </collision>
+  </link>
+  <joint name="base_canecaLateralIzquierda_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="canecaLateralIzquierda_link" />
+    <origin xyz="-0.0135 0.12775 0.016" rpy="0 0 0" />
+  </joint>
+
+
+  <link name="canecaLateralDerecha_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/canecaGrande.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="yellow" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 ${PI/2}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/canecaGrande.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="yellow" />
+    </collision>
+  </link>
+  <joint name="base_canecaLateralDerecha_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="canecaLateralDerecha_link" />
+    <origin xyz="-0.0135 -0.12775 0.016" rpy="0 0 0" />
+  </joint>
+
+  <link name="canecaFrontalDerecha_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI*((180-25.5)/180)}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/canecaGrande.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="green" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 ${PI*((180-25.5)/180)}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/canecaGrande.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="green" />
+    </collision>
+  </link>
+
+  <joint name="base_canecaFrontalDerecha_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="canecaFrontalDerecha_link" />
+    <origin xyz="0.19397558339 -0.09252160722 0.016" rpy="0 0 0" />
+  </joint>
+
+  <link name="canecaFrontalIzquierda_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 ${PI*(25.5/180) + PI}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/canecaGrande.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="blue" />
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 ${PI*(25.5/180) + PI}" />
+      <geometry>
+        <mesh filename="package://phantomx_pincher_description/meshes/STL/canecaGrande.stl"
+              scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="blue" />
+    </collision>
+
+  </link>
+
+
+  <joint name="base_canecaFrontalIzquierda_joint" type="fixed">
+    <parent link="baseFija_link" />
+    <child link="canecaFrontalIzquierda_link" />
+    <origin xyz="0.19397558339 0.09252160722 0.016" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- ============================= -->
+  <!-- 🌍 Global Rotation Wrapper -->
+  <!-- ============================= -->
+  <link name="world_link"/>
+
+  <joint name="world_to_base_joint" type="fixed">
+    <parent link="world_link"/>
+    <child link="baseFija_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+  <!-- 
+Superior (normal)	0 0 0
+Inferior (desde abajo)	${PI} 0 0
+Frontal	0 -${PI/2} 0
+Trasera	0 ${PI/2} 0
+Lateral derecha	0 0 -${PI/2}
+Lateral izquierda	0 0 ${PI/2}
+  -->
+
+</robot>
