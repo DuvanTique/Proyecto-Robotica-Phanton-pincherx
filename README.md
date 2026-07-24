@@ -43,7 +43,14 @@ sudo apt install -y \
 pip install --break-system-packages requests transforms3d python-dotenv pillow
 ```
 
-### 4. Clonar el repositorio
+### 4. Instalar Git LFS (necesario para los archivos STL/DAE del robot)
+
+```bash
+sudo apt install git-lfs
+git lfs install
+```
+
+### 5. Clonar el repositorio
 
 ```bash
 mkdir -p ~/ros2_jazzy && cd ~/ros2_jazzy
@@ -51,7 +58,9 @@ git clone https://github.com/DuvanTique/Proyecto-Robotica-Phanton-pincherx.git
 cd Proyecto-Robotica-Phanton-pincherx/phantom_ws
 ```
 
-### 5. Compilar
+> Si ya clonaste el repo antes de instalar Git LFS, ejecuta `git lfs pull` dentro del repositorio para descargar los archivos binarios correctamente.
+
+### 6. Compilar
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -59,7 +68,7 @@ source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 ```
 
-### 6. Agregar source al .bashrc (recomendado)
+### 7. Agregar source al .bashrc (recomendado)
 
 ```bash
 echo 'source /opt/ros/jazzy/setup.bash' >> ~/.bashrc
