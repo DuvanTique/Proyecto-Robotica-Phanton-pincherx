@@ -24,7 +24,7 @@ import rclpy
 from cv_bridge import CvBridge, CvBridgeError
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, Float32MultiArray
 
 try:
     import requests
@@ -129,6 +129,11 @@ class RecognitionNode(Node):
         self.busy_sub = self.create_subscription(
             Bool, "/routine_busy", self.busy_callback, 10
         )
+        # Permite ajustar el ROI en vivo desde la GUI:
+        # data = [x_min_pct, x_max_pct, y_min_pct, y_max_pct]
+        self.roi_config_sub = self.create_subscription(
+            Float32MultiArray, "/roi_config", self.roi_config_callback, 10
+        )
 
         self.bridge = CvBridge()
 
@@ -177,6 +182,30 @@ class RecognitionNode(Node):
             self.detection_buffer = []
             self.last_published_figure = ""
             self.vacio_streak = 0
+
+    def roi_config_callback(self, msg: Float32MultiArray) -> None:
+        """Actualiza el ROI en caliente. data = [x_min, x_max, y_min, y_max] (0.0-1.0)."""
+        if len(msg.data) != 4:
+            self.get_logger().warn(f"roi_config inválido: se esperaban 4 valores, llegaron {len(msg.data)}")
+            return
+
+        x_min, x_max, y_min, y_max = msg.data
+        # Validación básica de rango
+        x_min = max(0.0, min(1.0, x_min))
+        x_max = max(0.0, min(1.0, x_max))
+        y_min = max(0.0, min(1.0, y_min))
+        y_max = max(0.0, min(1.0, y_max))
+        if x_min >= x_max or y_min >= y_max:
+            self.get_logger().warn(f"roi_config inválido: rangos min >= max ({msg.data})")
+            return
+
+        self.roi_x_min_pct = x_min
+        self.roi_x_max_pct = x_max
+        self.roi_y_min_pct = y_min
+        self.roi_y_max_pct = y_max
+        self.get_logger().info(
+            f"ROI actualizado: X[{x_min:.2f}-{x_max:.2f}] Y[{y_min:.2f}-{y_max:.2f}]"
+        )
 
     def image_callback(self, msg: Image) -> None:
         try:

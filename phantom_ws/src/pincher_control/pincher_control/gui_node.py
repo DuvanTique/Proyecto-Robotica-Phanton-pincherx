@@ -26,10 +26,11 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Optional
 import threading
+import time
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, Float32MultiArray
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
@@ -86,6 +87,9 @@ class GuiRosNode(Node):
         self.joint_cmd_pub = self.create_publisher(Float64MultiArray, "/joint_command", 10)
         self.pose_cmd_pub = self.create_publisher(PoseCommand, "/pose_command", 10)
 
+        # Publisher para ajustar el ROI de detección en vivo
+        self.roi_config_pub = self.create_publisher(Float32MultiArray, "/roi_config", 10)
+
         # Subscribers
         self.figure_state_sub = self.create_subscription(
             String, "/figure_state", self._figure_state_cb, 10
@@ -96,6 +100,9 @@ class GuiRosNode(Node):
         self.debug_image_sub = self.create_subscription(
             Image, "/camera/debug", self._image_cb, 10
         )
+        self.torque_status_sub = self.create_subscription(
+            Bool, "/torque_status", self._torque_status_cb, 10
+        )
 
         self.bridge = CvBridge()
 
@@ -104,12 +111,18 @@ class GuiRosNode(Node):
         self.is_busy = False
         self.latest_cv_image: Optional[np.ndarray] = None
         self.image_lock = threading.Lock()
+        self.torque_enabled: Optional[bool] = None  # None = sin datos (sim o no reportado)
+        self.torque_last_update = 0.0
 
     def _figure_state_cb(self, msg: String):
         self.current_figure_state = msg.data
 
     def _busy_cb(self, msg: Bool):
         self.is_busy = msg.data
+
+    def _torque_status_cb(self, msg: Bool):
+        self.torque_enabled = bool(msg.data)
+        self.torque_last_update = time.time()
 
     def _image_cb(self, msg: Image):
         try:
@@ -130,6 +143,12 @@ class GuiRosNode(Node):
         msg = Float64MultiArray()
         msg.data = [0.01745, 0.01745, 0.01745, 0.01745]
         self.joint_cmd_pub.publish(msg)
+
+    def publish_roi_config(self, x_min, x_max, y_min, y_max):
+        """Envía la nueva configuración de ROI al recognition_node."""
+        msg = Float32MultiArray()
+        msg.data = [float(x_min), float(x_max), float(y_min), float(y_max)]
+        self.roi_config_pub.publish(msg)
 
     def publish_pose(self, x, y, z, roll, pitch, yaw):
         """Envía un PoseCommand al commander."""
@@ -277,6 +296,35 @@ class PincherGUI:
         ttk.Label(moveit_frame, textvariable=self.gripper_var, style="Info.TLabel",
                   background="#333333").pack(pady=3)
 
+        self.torque_var = tk.StringVar(value="⚪ Torque: sin datos")
+        self.torque_label = tk.Label(moveit_frame, textvariable=self.torque_var,
+                                     bg="#333333", fg="#aaaaaa", font=("Segoe UI", 10, "bold"))
+        self.torque_label.pack(pady=3)
+
+        # --- ROI de detección (ajustable) ---
+        roi_frame = tk.LabelFrame(right_frame, text="Zona de Detección (ROI)",
+                                  bg="#333333", fg="white", font=("Segoe UI", 10, "bold"))
+        roi_frame.pack(fill="x", pady=5)
+
+        self.roi_sliders = {}
+        roi_defaults = {"X min": 35, "X max": 65, "Y min": 35, "Y max": 65}
+        for label, default in roi_defaults.items():
+            row = tk.Frame(roi_frame, bg="#333333")
+            row.pack(fill="x", padx=8, pady=2)
+            tk.Label(row, text=label, bg="#333333", fg="white", width=6,
+                     font=("Segoe UI", 9)).pack(side="left")
+            var = tk.IntVar(value=default)
+            scale = tk.Scale(row, from_=0, to=100, orient="horizontal", variable=var,
+                             bg="#333333", fg="white", troughcolor="#555555",
+                             highlightthickness=0, length=180,
+                             command=lambda v, l=label: self._on_roi_change())
+            scale.pack(side="left", fill="x", expand=True)
+            self.roi_sliders[label] = var
+
+        tk.Button(roi_frame, text="Aplicar ROI", command=self._on_apply_roi,
+                  bg="#6B3FA0", fg="white", font=("Segoe UI", 9, "bold"),
+                  relief="flat", padx=6, pady=4, cursor="hand2").pack(pady=6)
+
         # ---- Controls ----
         ctrl_frame = tk.Frame(self.root, bg="#1a1a1a")
         ctrl_frame.pack(fill="x", pady=5)
@@ -372,6 +420,25 @@ class PincherGUI:
         else:
             self.status_var.set(f"No hay figura válida detectada (actual: {detected})")
 
+    def _on_roi_change(self):
+        """Solo actualiza el label visual mientras se arrastra el slider."""
+        pass  # El envío real ocurre al presionar "Aplicar ROI"
+
+    def _on_apply_roi(self):
+        x_min = self.roi_sliders["X min"].get() / 100.0
+        x_max = self.roi_sliders["X max"].get() / 100.0
+        y_min = self.roi_sliders["Y min"].get() / 100.0
+        y_max = self.roi_sliders["Y max"].get() / 100.0
+
+        if x_min >= x_max or y_min >= y_max:
+            self.status_var.set("⚠️  ROI inválido: min debe ser menor que max.")
+            return
+
+        self.node.publish_roi_config(x_min, x_max, y_min, y_max)
+        self.status_var.set(
+            f"ROI actualizado: X[{x_min:.2f}-{x_max:.2f}] Y[{y_min:.2f}-{y_max:.2f}]"
+        )
+
     def _on_gripper_open(self):
         self.node.publish_gripper(True)
         self.gripper_var.set("Gripper: ABIERTO")
@@ -436,6 +503,9 @@ class PincherGUI:
         else:
             self.moveit_var.set("✅ Listo para planificar")
 
+        # Update torque status
+        self._update_torque_display()
+
         # Update camera image
         self._update_camera_image()
 
@@ -447,6 +517,24 @@ class PincherGUI:
                 self.status_var.set(f"Auto: clasificando {detected}...")
 
         self.root.after(200, self._update_display)
+
+    def _update_torque_display(self):
+        """Actualiza el indicador de estado de torque de los motores."""
+        # Si no hemos recibido /torque_status en los últimos 3s, asumimos
+        # que estamos en simulación (no hay hardware real conectado).
+        no_data = (
+            self.node.torque_enabled is None
+            or (time.time() - self.node.torque_last_update) > 3.0
+        )
+        if no_data:
+            self.torque_var.set("⚪ Torque: sin datos (¿simulación?)")
+            self.torque_label.config(fg="#aaaaaa")
+        elif self.node.torque_enabled:
+            self.torque_var.set("🟢 Torque: HABILITADO")
+            self.torque_label.config(fg="#44ff44")
+        else:
+            self.torque_var.set("🔴 Torque: DESHABILITADO")
+            self.torque_label.config(fg="#ff4444")
 
     def _update_camera_image(self):
         """Actualiza el canvas con la última imagen de la cámara."""

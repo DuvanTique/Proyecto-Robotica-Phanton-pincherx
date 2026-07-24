@@ -150,6 +150,11 @@ class PincherFollowJointTrajectory(Node):
         self.joint_state_pub = self.create_publisher(JointState, "joint_states", 10)
         self.joint_state_timer = self.create_timer(0.02, self.publish_joint_states)
 
+        # Publisher de estado de torque (True = habilitado en todos los servos)
+        self.torque_status_pub = self.create_publisher(Bool, "/torque_status", 10)
+        self.torque_enabled = True  # Se actualizará tras la inicialización
+        self.torque_status_timer = self.create_timer(0.5, self._publish_torque_status)
+
         # -------------- Inicialización de comunicación Dynamixel --------------
         # Abre el puerto serie y configura el baudrate.
         self.port = PortHandler(port_name)
@@ -242,6 +247,13 @@ class PincherFollowJointTrajectory(Node):
             self.get_logger().error("🚨 EMERGENCY STOP: Deshabilitando torque de todos los servos")
             for joint_name, dxl_id in self.joint_to_id.items():
                 self.packet.write1ByteTxRx(self.port, dxl_id, ADDR_TORQUE_ENABLE, 0)
+            self.torque_enabled = False
+
+    def _publish_torque_status(self):
+        """Publica periódicamente si el torque está habilitado."""
+        msg = Bool()
+        msg.data = self.torque_enabled
+        self.torque_status_pub.publish(msg)
 
     def set_gripper_callback(self, msg: Bool):
         """
