@@ -57,10 +57,11 @@ class RecognitionNode(Node):
         self.declare_parameter("inference_hz", 1.0)
         self.declare_parameter("publish_roi", True)
 
-        self.declare_parameter("roi_x_min_pct", 0.45)
-        self.declare_parameter("roi_x_max_pct", 0.60)
-        self.declare_parameter("roi_y_min_pct", 0.62)
-        self.declare_parameter("roi_y_max_pct", 0.77)
+        # ROI centrado en la pantalla por defecto (zona cuadrada al centro)
+        self.declare_parameter("roi_x_min_pct", 0.35)
+        self.declare_parameter("roi_x_max_pct", 0.65)
+        self.declare_parameter("roi_y_min_pct", 0.35)
+        self.declare_parameter("roi_y_max_pct", 0.65)
 
         # Estabilización
         self.declare_parameter("buffer_size", 5)

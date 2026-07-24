@@ -59,6 +59,25 @@ def generate_launch_description():
         description="Iniciar nodo clasificador.",
     )
 
+    # Argumentos de la Región de Interés (ROI) para la detección.
+    # Por defecto delimita una zona cuadrada centrada en la pantalla.
+    roi_x_min_arg = DeclareLaunchArgument(
+        "roi_x_min_pct", default_value="0.35",
+        description="Límite izquierdo del ROI (0.0-1.0, porcentaje del ancho).",
+    )
+    roi_x_max_arg = DeclareLaunchArgument(
+        "roi_x_max_pct", default_value="0.65",
+        description="Límite derecho del ROI (0.0-1.0, porcentaje del ancho).",
+    )
+    roi_y_min_arg = DeclareLaunchArgument(
+        "roi_y_min_pct", default_value="0.35",
+        description="Límite superior del ROI (0.0-1.0, porcentaje del alto).",
+    )
+    roi_y_max_arg = DeclareLaunchArgument(
+        "roi_y_max_pct", default_value="0.65",
+        description="Límite inferior del ROI (0.0-1.0, porcentaje del alto).",
+    )
+
     # Launch configs
     start_camera = LaunchConfiguration("start_camera")
     camera_device = LaunchConfiguration("camera_device")
@@ -67,6 +86,10 @@ def generate_launch_description():
     framerate = LaunchConfiguration("framerate")
     inference_hz = LaunchConfiguration("inference_hz")
     start_clasificador = LaunchConfiguration("start_clasificador")
+    roi_x_min_pct = LaunchConfiguration("roi_x_min_pct")
+    roi_x_max_pct = LaunchConfiguration("roi_x_max_pct")
+    roi_y_min_pct = LaunchConfiguration("roi_y_min_pct")
+    roi_y_max_pct = LaunchConfiguration("roi_y_max_pct")
 
     # Nodo cámara
     camera_node = Node(
@@ -102,6 +125,10 @@ def generate_launch_description():
             "confidence_threshold": 0.70,
             "inference_hz": inference_hz,
             "publish_roi": True,
+            "roi_x_min_pct": roi_x_min_pct,
+            "roi_x_max_pct": roi_x_max_pct,
+            "roi_y_min_pct": roi_y_min_pct,
+            "roi_y_max_pct": roi_y_max_pct,
         }],
     )
 
@@ -126,6 +153,10 @@ def generate_launch_description():
         framerate_arg,
         inference_hz_arg,
         start_clasificador_arg,
+        roi_x_min_arg,
+        roi_x_max_arg,
+        roi_y_min_arg,
+        roi_y_max_arg,
         camera_node,
         api_recognition_node,
         clasificador_node,
