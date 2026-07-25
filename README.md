@@ -196,9 +196,6 @@ Las poses están definidas en coordenadas cartesianas (x, y, z, roll, pitch, yaw
 | caneca_azul | 0.192 | -0.088 | 0.184 | Drop: pentágono |
 | caneca_amarilla | -0.010 | -0.110 | 0.109 | Drop: rectángulo |
 
-![RViz escena de planificación](imagenes/rviz_escena.png)
-
-![RViz trayectoria planificada](imagenes/rviz_trayectoria.png)
 
 ---
 
@@ -244,7 +241,6 @@ Orden: `[ID1_shoulder_pan, ID2_shoulder_lift, ID3_elbow_flex, ID4_wrist_flex, gr
 - Se verificó que el robot real coincide con la visualización en RViz al ejecutar movimientos articulares individuales.
 - Se corrigieron los signos de los 4 motores del brazo para que el sentido de giro físico coincida con el modelo.
 
-![Calibración cámara-bandeja](imagenes/calibracion_camara.png)
 
 ---
 
@@ -445,24 +441,6 @@ Cuando se detectan múltiples objetos en el ROI, el sistema selecciona automáti
 ### 11.5 Consideraciones de Iluminación
 
 El modelo fue re-entrenado con variaciones de iluminación para mejorar su robustez. Sin embargo, se recomienda utilizar iluminación cenital difusa para obtener los mejores resultados, ya que las sombras laterales pronunciadas pueden generar confusiones entre cubos y pentágonos debido a las aristas falsas que las sombras producen en la silueta de los objetos.
-
----
-
-## 12. Evidencias del Sistema de Visión
-
-### 12.1 Detección de Figuras
-
-![Detección cubo](imagenes/deteccion_cubo.png)
-
-![Detección cilindro](imagenes/deteccion_cilindro.png)
-
-![Detección pentágono](imagenes/deteccion_pentagono.png)
-
-![Detección rectángulo](imagenes/deteccion_rectangulo.png)
-
-### 12.2 ROI Configurado
-
-![ROI configurado](imagenes/roi_configurado.png)
 
 ---
 

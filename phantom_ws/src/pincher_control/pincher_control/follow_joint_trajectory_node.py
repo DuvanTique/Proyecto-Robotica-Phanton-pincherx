@@ -142,7 +142,7 @@ class PincherFollowJointTrajectory(Node):
         #   robot real, pero las trayectorias se ejecutaban hacia el lado
         #   opuesto; se corrige aquí (signo del motor) y no en el URDF, para
         #   no afectar la geometría usada por la planificación de MoveIt.
-        #   ID 1:  -1  (shoulder pan)  — invertido respecto al valor original
+        #   ID 1:  +1  (shoulder pan)  — invertido respecto al valor original
         #   ID 2:  +1  (shoulder lift) — invertido respecto al valor original
         #   ID 3:  +1  (elbow flex)    — invertido respecto al valor original
         #   ID 4:  +1  (wrist flex)    — invertido respecto al valor original
