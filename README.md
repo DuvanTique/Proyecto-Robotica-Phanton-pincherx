@@ -138,7 +138,22 @@ flowchart TD
 
 ## 4. Plano de Planta
 
-![Plano de planta](imagenes/plano_planta.png)
+![Plano de planta](imagenes/plano_planta.jpeg)
+
+**Kit de clasificación completo ensamblado. Sus partes son:**
+
+1. Manipulador robótico PhantomX Pincher AX-12 con 4 grados de libertad.
+2. Plataforma base de MDF (554 mm × 360 mm × 9 mm) con acabado negro mate.
+3. Base del manipulador con sistema de identificación numérica.
+4. Sistema de succión por vacío con gripper intercambiable (no utilizado).
+5. Controlador Raspberry Pi 5 en carcasa protectora.
+6. Soporte de cámara con mástil vertical y brazo en voladizo.
+7. Zona de recolección circular blanca (Ø146 mm).
+8. Multitoma personalizada con control individual de subsistemas.
+9. Caneca de depósito roja.
+10. Caneca de depósito verde.
+11. Caneca de depósito azul.
+12. Caneca de depósito amarilla.
 
 ### Disposición de Elementos
 
