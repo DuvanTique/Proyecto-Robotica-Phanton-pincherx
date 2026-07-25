@@ -1,12 +1,15 @@
 # Proyecto Final - Robótica 2026-I
 
-## Clasificación Automatizada de Figuras Geométricas con PhantomX Pincher X100
+## Clasificación Automatizada de Figuras Geométricas con PhantomX Pincher
 
-Proyecto de clasificación automatizada utilizando el robot **PhantomX Pincher X100**, visión de máquina mediante **API de Roboflow** (Object Detection), planificación de trayectorias con **MoveIt 2** y **ROS 2 Jazzy** sobre Ubuntu 24.04.
+Proyecto de clasificación automatizada utilizando el robot **PhantomX Pincher X**, visión de máquina mediante **API de Roboflow** (Object Detection), planificación de trayectorias con **MoveIt 2** y **ROS 2 Jazzy** sobre Ubuntu 24.04.
 
 ## Equipo
 
-- Duvan Tique
+- Duvan Stiven Tique Osorio
+- Luis Alberto Mendoza Rojaz
+- Juan Diego López Mayorga
+Edward Jeisen Jair Arévalo Peña
 
 ---
 
@@ -25,22 +28,22 @@ Se desarrolló un sistema integrado que combina:
 - **Control de hardware**: un nodo Python se comunica con los motores Dynamixel AX-12A del robot real a través del protocolo 1.0, ejecutando las trayectorias punto a punto.
 - **Interfaz gráfica (GUI)**: una aplicación Tkinter permite al operador supervisar el proceso, disparar escaneos, iniciar ciclos y activar la parada de emergencia.
 
-### 1.3 Alcance Real Logrado
+### 1.3 Alcance 
 
-| Funcionalidad | Estado |
-|---|---|
-| Detección de 4 formas geométricas vía API Roboflow | ✅ Operativo |
-| Planificación de trayectorias con MoveIt 2 (OMPL) | ✅ Operativo |
-| Ejecución en simulación (ros2_control fake) | ✅ Operativo |
-| Ejecución en robot real (Dynamixel AX-12A) | ✅ Operativo |
-| Clasificación a 4 canecas diferenciadas | ✅ Operativo |
-| Parada de emergencia con deshabilitación de torque | ✅ Operativo |
-| GUI con cámara en vivo, estados y controles | ✅ Operativo |
-| Objetos de colisión (mesa, canecas, bandeja, soporte) | ✅ Operativo |
-| Calibración de signos de motores | ✅ Verificado |
-| Calibración fina de offset articular (joint_calibration.yaml) | ✅ Configurable |
-| Ejecución headless en Raspberry Pi 5 | ✅ Preparado |
-| Modo bajo demanda de API (sin saturar Roboflow) | ✅ Operativo |
+| Funcionalidad |
+|---|
+| Detección de 4 formas geométricas vía API Roboflow 
+| Planificación de trayectorias con MoveIt 2 (OMPL)
+| Ejecución en simulación (ros2_control fake) 
+| Ejecución en robot real (Dynamixel AX-12A) 
+| Clasificación a 4 canecas diferenciadas 
+| Parada de emergencia con deshabilitación de torque 
+| GUI con cámara en vivo, estados y controles 
+| Objetos de colisión (mesa, canecas, bandeja, soporte) 
+| Calibración  de motores 
+| Calibración fina de offset articular (joint_calibration.yaml)
+| Ejecución  en Raspberry Pi 5 
+
 
 ---
 
@@ -48,39 +51,35 @@ Se desarrolló un sistema integrado que combina:
 
 ### 2.1 Decisiones de Diseño
 
-| Decisión | Justificación |
-|---|---|
-| Usar API REST de Roboflow en lugar de YOLO local | Evita instalar PyTorch/Ultralytics en Raspberry Pi; reduce complejidad de dependencias |
-| Inferencia bajo demanda (no continua) | Evita saturar la API con llamadas continuas; solo se consulta al presionar Scan o al finalizar un ciclo |
-| MoveIt 2 con OMPL para planificación | Planificador robusto con soporte de colisiones; estándar de la industria en ROS 2 |
-| Control directo del gripper con `/set_gripper` | Más rápido que esperar trayectorias MoveIt para un joint prismático simple |
-| Signos de motores configurados en software | Permite corregir discrepancias entre el modelo URDF y el montaje físico sin rearmar hardware |
-| Calibración por archivo YAML centralizado | Un solo punto de ajuste que afecta globalmente todas las trayectorias del robot real |
+El diseño del sistema se fundamentó en la necesidad de ejecutar el proyecto tanto en un computador de escritorio como en una Raspberry Pi 5. Inicialmente se consideró utilizar un modelo YOLOv8 de clasificación entrenado localmente para la detección de figuras geométricas, sin embargo, las limitaciones de memoria y procesamiento de la Raspberry Pi 5 hicieron inviable la instalación de PyTorch y Ultralytics en ese hardware. Por esta razón se optó por delegar la inferencia a la API REST de Roboflow, que permite enviar una imagen y recibir la clasificación sin necesidad de ejecutar modelos pesados localmente.
+
+Para la planificación de trayectorias se eligió MoveIt 2 con el planificador OMPL, ya que es el estándar en ROS 2 para manipulación robótica y ofrece soporte nativo de validación de colisiones. El nodo `commander` en C++ actúa como intermediario entre los comandos de alto nivel y MoveIt, permitiendo que los nodos de control en Python se comuniquen únicamente a través de tópicos ROS sin necesidad de gestionar directamente la interfaz de MoveIt.
+
+El control del gripper se implementó como un comando directo a los ticks del servo Dynamixel, sin pasar por trayectorias de MoveIt, ya que la apertura y cierre del gripper es un movimiento simple que no requiere planificación. Esto reduce significativamente el tiempo de ciclo comparado con generar y ejecutar trayectorias completas para un solo joint prismático.
+
+La arquitectura de inferencia se diseñó en modo bajo demanda: la API de Roboflow solo se consulta cuando el operador presiona el botón Scan en la GUI o cuando el clasificador finaliza un ciclo de pick & place. Este enfoque evita saturar la API con llamadas continuas y reduce el consumo de ancho de banda, que es especialmente relevante cuando el sistema se ejecuta en una Raspberry Pi conectada por WiFi.
 
 ### 2.2 Dificultades Encontradas
 
-| Dificultad | Solución |
-|---|---|
-| MoveIt Servo incompatible con Jazzy | Se deshabilitó Servo; las trayectorias se ejecutan por planificación completa |
-| Plugin `fake_components/GenericSystem` renombrado | Se actualizó a `mock_components/GenericSystem` |
-| Robot real se mueve al revés que la simulación | Se invirtieron todos los signos de motores en `follow_joint_trajectory_node.py` |
-| Puerto USB cambia de nombre entre reinicios | Se agregó argumento `port:=` al launch para seleccionarlo dinámicamente |
-| API de Roboflow saturada con llamadas continuas | Se implementó modo bajo demanda con `/trigger_scan` |
-| Múltiples detecciones en un solo ROI | Se selecciona la de mayor confianza; se emite advertencia en logs |
+Durante el desarrollo del proyecto se presentaron varias dificultades técnicas que requirieron soluciones específicas. La primera y más crítica fue un problema con la planificación de trayectorias desde la posición Home. Cuando todas las articulaciones del robot se encontraban exactamente en 0 radianes, MoveIt presentaba un comportamiento errático: el robot podía completar un primer ciclo de pick & place correctamente, pero al intentar un segundo ciclo desde esa misma posición, el planificador no lograba calcular una trayectoria válida o la calculaba en sentido contrario al esperado. Después de analizar el problema se determinó que la configuración con todos los joints en cero representaba una singularidad o un punto límite para el solver cinemático KDL. La solución implementada fue definir la posición Home con un offset de 1 grado en todas las articulaciones (`[0.01745, 0.01745, 0.01745, 0.01745]` rad), lo cual eliminó completamente el problema y permitió al planificador encontrar soluciones consistentes en todos los ciclos subsecuentes.
+
+La segunda dificultad importante se relacionó con el modelo de inteligencia artificial para la detección de figuras. El modelo YOLOv8 de clasificación entrenado originalmente funcionaba correctamente en un computador de escritorio con GPU, pero resultó imposible de desplegar en la Raspberry Pi 5 debido a que las dependencias de PyTorch y Ultralytics superaban la capacidad de memoria RAM disponible y el tiempo de inferencia era inaceptablemente lento sin aceleración por GPU. Para resolver este problema se migró completamente a la API de Roboflow, re-entrenando el modelo en la plataforma en línea y accediendo a la inferencia mediante peticiones HTTP REST. Esto permitió que la Raspberry Pi solo necesitara enviar una imagen codificada en base64 y recibir un JSON con la predicción, sin ninguna dependencia de frameworks de deep learning locales.
+
+La tercera dificultad se manifestó en la calidad de las detecciones del modelo de visión. Se descubrió que las condiciones de iluminación afectaban severamente la precisión de la clasificación: cuando la iluminación no era cenital o producía sombras pronunciadas sobre las figuras geométricas, el modelo confundía los cubos con pentágonos de forma recurrente. Las sombras proyectadas alteraban la silueta percibida del cubo, generando aristas adicionales que el modelo interpretaba como los lados de un pentágono. La solución fue garantizar una iluminación superior difusa que minimizara las sombras, y ajustar el umbral de confianza (`confidence_threshold`) a 0.7 para descartar detecciones ambiguas. Adicionalmente, se re-entrenó el modelo en Roboflow incluyendo imágenes con variaciones de iluminación para mejorar su robustez.
 
 ### 2.3 Resultados
 
-- El robot ejecuta secuencias completas de pick & place en simulación y en hardware real.
-- La GUI muestra la imagen de la cámara con el ROI dibujado y la detección.
-- Tiempos de ciclo típicos: ~30-40 segundos por figura (incluyendo planificación, movimiento y espera).
-- La parada de emergencia desactiva el torque inmediatamente en todos los servos.
+El sistema completo demostró ser funcional tanto en simulación como en el robot real. En modo simulado, el robot ejecuta secuencias completas de pick & place para las cuatro figuras geométricas sin errores de planificación, con un tiempo de ciclo promedio de 30 segundos por figura incluyendo los tiempos de espera entre movimientos. En el robot real, el tiempo de ciclo aumenta ligeramente a 35-40 segundos debido a la velocidad de los servos Dynamixel AX-12A y la latencia de comunicación con la API de Roboflow.
+
+La GUI permite al operador supervisar todo el proceso en tiempo real: la imagen de la cámara con el ROI y la detección superpuesta, el estado de la máquina de estados, el conteo de figuras clasificadas y el estado de los motores. La parada de emergencia desactiva el torque de todos los servos en menos de 100 ms desde que se presiona el botón.
 
 ### 2.4 Conclusiones
 
-- La integración de MoveIt 2 con hardware real requiere una capa de traducción (action server + conversión de unidades) que no es trivial.
-- La API externa de Roboflow simplifica enormemente el pipeline de visión, pero introduce dependencia de conectividad a Internet.
-- El modo bajo demanda es más eficiente que la inferencia continua para aplicaciones de pick & place discreto.
-- La calibración de signos de motores debe verificarse siempre que se cambie de robot o se reensamblen los servos.
+La integración de MoveIt 2 con hardware real requiere una capa de traducción cuidadosamente diseñada que convierta entre las coordenadas del modelo URDF y los comandos específicos de los servos, incluyendo correcciones de signos y offsets de calibración que varían entre unidades de robot.
+
+La delegación de la inferencia a una API externa simplifica enormemente la arquitectura del software y permite ejecutar el sistema en hardware embebido de bajo costo, pero introduce una dependencia de conectividad a Internet que debe considerarse en el diseño de la aplicación.
+
+Las condiciones de iluminación son un factor crítico en sistemas de visión por computador aplicados a la clasificación geométrica, y deben controlarse como parte del diseño físico de la celda de trabajo, no solo del software.
 
 ---
 
