@@ -138,8 +138,6 @@ flowchart TD
 
 ## 4. Plano de Planta
 
-> **Nota:** Insertar la imagen del plano de planta con la ubicación del robot, cámara, bandeja y canecas.
-
 ![Plano de planta](imagenes/plano_planta.png)
 
 ### Disposición de Elementos
