@@ -81,7 +81,6 @@ La delegación de la inferencia de visión a una API externa como Roboflow simpl
 
 Las condiciones de iluminación demostraron ser un factor crítico en la precisión del sistema de visión por computador aplicado a la clasificación geométrica. Las sombras producidas por iluminación lateral generan aristas falsas en las siluetas de los objetos que confunden al modelo de detección. Por lo tanto, el control de la iluminación debe considerarse como parte integral del diseño físico de la celda de trabajo y no únicamente como un aspecto del procesamiento de imagen por software.
 
-Finalmente, la integración entre MoveIt 2 y el hardware real del robot a través de los servos Dynamixel AX-12A requiere una capa de traducción cuidadosamente implementada que considere los signos de rotación, los offsets de calibración y las diferencias entre las unidades del modelo cinemático y los ticks de los motores. Esta capa, una vez configurada correctamente, permite que el mismo código de planificación funcione de manera transparente tanto en simulación como en el robot físico.
 
 ## 3. Diagrama de Flujo del Proceso Global
 
@@ -249,7 +248,7 @@ Orden: `[ID1_shoulder_pan, ID2_shoulder_lift, ID3_elbow_flex, ID4_wrist_flex, gr
 
 ---
 
-## 7. Código Fuente Comentado
+## 7. Código Fuente 
 
 El código fuente de cada nodo está documentado con READMEs  individuales:
 
@@ -375,9 +374,83 @@ phantom_ws/src/phantomx_pincher_moveit_config/config/ompl_planning.yaml
 
 ---
 
-## 11. Evidencias del Sistema de Visión
+## 11. Modelo de Detección (Roboflow)
 
-### 11.1 Detección de Figuras
+### 11.1 Información del Modelo
+
+| Parámetro | Valor |
+|---|---|
+| Plataforma | [Roboflow](https://roboflow.com) |
+| Tipo de proyecto | Object Detection |
+| Arquitectura | YOLOv8s |
+| Model ID | `duvans-workspace-fy2lt/deteccion-de-figuras-0hn7y-4-yolov8s-t1` |
+| Clases | `cubo`, `cilindro`, `pentagono`, `rectangulo` |
+| Umbral de confianza | 0.70 (configurable) |
+
+El modelo fue entrenado en la plataforma de Roboflow utilizando imágenes del ROI de la cámara del kit en diversas condiciones de iluminación. La arquitectura YOLOv8s ofrece un balance adecuado entre velocidad de inferencia y precisión para la detección de formas geométricas simples.
+
+### 11.2 Endpoint de la API
+
+La inferencia se realiza mediante una petición POST al endpoint:
+
+```
+https://detect.roboflow.com/deteccion-de-figuras-0hn7y-4-yolov8s-t1?api_key=<API_KEY>
+```
+
+El cuerpo de la petición es la imagen codificada en base64. La respuesta es un JSON con las detecciones:
+
+```json
+{
+  "predictions": [
+    {
+      "x": 60,
+      "y": 47,
+      "width": 22,
+      "height": 22,
+      "confidence": 0.939,
+      "class": "pentagono",
+      "class_id": 2,
+      "detection_id": "ecb69f88-ecb4-444f-b54e-5fcaf37d7556"
+    },
+    {
+      "x": 29.5,
+      "y": 62.5,
+      "width": 25,
+      "height": 25,
+      "confidence": 0.916,
+      "class": "cubo",
+      "class_id": 1,
+      "detection_id": "70750882-7498-4389-b45a-f61d52666bcd"
+    }
+  ]
+}
+```
+
+Cada predicción incluye:
+- `x`, `y`: centro del bounding box (píxeles).
+- `width`, `height`: dimensiones del bounding box.
+- `confidence`: probabilidad de la detección (0.0–1.0).
+- `class`: clase detectada (nombre de la figura).
+
+Cuando se detectan múltiples objetos en el ROI, el sistema selecciona automáticamente la predicción con mayor `confidence`.
+
+### 11.3 Métricas de Entrenamiento
+
+![Gráficas de entrenamiento](imagenes/metricas_entrenamiento.png)
+
+### 11.4 Ejemplo de Detección
+
+![Ejemplo de detección del modelo](imagenes/ejemplo_deteccion_modelo.png)
+
+### 11.5 Consideraciones de Iluminación
+
+El modelo fue re-entrenado con variaciones de iluminación para mejorar su robustez. Sin embargo, se recomienda utilizar iluminación cenital difusa para obtener los mejores resultados, ya que las sombras laterales pronunciadas pueden generar confusiones entre cubos y pentágonos debido a las aristas falsas que las sombras producen en la silueta de los objetos.
+
+---
+
+## 12. Evidencias del Sistema de Visión
+
+### 12.1 Detección de Figuras
 
 ![Detección cubo](imagenes/deteccion_cubo.png)
 
@@ -387,30 +460,13 @@ phantom_ws/src/phantomx_pincher_moveit_config/config/ompl_planning.yaml
 
 ![Detección rectángulo](imagenes/deteccion_rectangulo.png)
 
-### 11.2 ROI Configurado
+### 12.2 ROI Configurado
 
 ![ROI configurado](imagenes/roi_configurado.png)
 
-### 11.3 Respuesta de la API
-
-Ejemplo de respuesta de Roboflow para una imagen con pentágono:
-
-```json
-{
-  "predictions": [
-    {
-      "x": 60, "y": 47,
-      "width": 22, "height": 22,
-      "confidence": 0.939,
-      "class": "pentagono"
-    }
-  ]
-}
-```
-
 ---
 
-## 12. Clasificación de Figuras
+## 13. Clasificación de Figuras
 
 | Figura detectada | Destino | Color caneca |
 |---|---|---|
