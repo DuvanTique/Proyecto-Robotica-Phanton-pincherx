@@ -71,17 +71,17 @@ La tercera dificultad se manifestó en la calidad de las detecciones del modelo 
 
 El sistema completo demostró ser funcional tanto en simulación como en el robot real. En modo simulado, el robot ejecuta secuencias completas de pick & place para las cuatro figuras geométricas sin errores de planificación, con un tiempo de ciclo promedio de 30 segundos por figura incluyendo los tiempos de espera entre movimientos. En el robot real, el tiempo de ciclo aumenta ligeramente a 35-40 segundos debido a la velocidad de los servos Dynamixel AX-12A y la latencia de comunicación con la API de Roboflow.
 
-La GUI permite al operador supervisar todo el proceso en tiempo real: la imagen de la cámara con el ROI y la detección superpuesta, el estado de la máquina de estados, el conteo de figuras clasificadas y el estado de los motores. La parada de emergencia desactiva el torque de todos los servos en menos de 100 ms desde que se presiona el botón.
+por el momento el brazo robotico solo es capaz de recolectar y posicionar la figura geometrica que se encuentre en el centro de la zona de recolección, es necesario añadir la funcionalidad de que pueda recojer las demás con mas tiempo de desarrollo.
 
 ### 2.4 Conclusiones
 
-La integración de MoveIt 2 con hardware real requiere una capa de traducción cuidadosamente diseñada que convierta entre las coordenadas del modelo URDF y los comandos específicos de los servos, incluyendo correcciones de signos y offsets de calibración que varían entre unidades de robot.
+El uso de MoveIt 2 junto con RViz para la planificación de trayectorias de pick & place del brazo robótico permite realizar un desarrollo completamente simulado del sistema antes de ejecutar cualquier movimiento sobre el hardware real. Esta capacidad de simulación previa resulta fundamental para evitar posibles daños al robot durante la etapa de desarrollo, ya que permite visualizar cada trayectoria planificada, verificar que no existen colisiones con los objetos del entorno y confirmar que las secuencias de movimiento siguen el orden y la dirección esperados. Además, la simulación permite evidenciar problemas tanto en el diseño de las trayectorias como en la lógica de programación de la máquina de estados, lo cual convierte a MoveIt 2 con RViz en una herramienta indispensable para el desarrollo seguro e iterativo de aplicaciones de manipulación robótica.
 
-La delegación de la inferencia a una API externa simplifica enormemente la arquitectura del software y permite ejecutar el sistema en hardware embebido de bajo costo, pero introduce una dependencia de conectividad a Internet que debe considerarse en el diseño de la aplicación.
+La delegación de la inferencia de visión a una API externa como Roboflow simplifica significativamente la arquitectura del software y habilita la ejecución del sistema en hardware embebido de bajo costo como la Raspberry Pi 5, eliminando la necesidad de instalar frameworks pesados de deep learning. Sin embargo, esta decisión introduce una dependencia de conectividad a Internet que debe considerarse en el diseño de la aplicación y en la selección del entorno de operación.
 
-Las condiciones de iluminación son un factor crítico en sistemas de visión por computador aplicados a la clasificación geométrica, y deben controlarse como parte del diseño físico de la celda de trabajo, no solo del software.
+Las condiciones de iluminación demostraron ser un factor crítico en la precisión del sistema de visión por computador aplicado a la clasificación geométrica. Las sombras producidas por iluminación lateral generan aristas falsas en las siluetas de los objetos que confunden al modelo de detección. Por lo tanto, el control de la iluminación debe considerarse como parte integral del diseño físico de la celda de trabajo y no únicamente como un aspecto del procesamiento de imagen por software.
 
----
+Finalmente, la integración entre MoveIt 2 y el hardware real del robot a través de los servos Dynamixel AX-12A requiere una capa de traducción cuidadosamente implementada que considere los signos de rotación, los offsets de calibración y las diferencias entre las unidades del modelo cinemático y los ticks de los motores. Esta capa, una vez configurada correctamente, permite que el mismo código de planificación funcione de manera transparente tanto en simulación como en el robot físico.
 
 ## 3. Diagrama de Flujo del Proceso Global
 
@@ -251,7 +251,7 @@ Orden: `[ID1_shoulder_pan, ID2_shoulder_lift, ID3_elbow_flex, ID4_wrist_flex, gr
 
 ## 7. Código Fuente Comentado
 
-El código fuente de cada nodo está documentado con READMEs técnicos individuales:
+El código fuente de cada nodo está documentado con READMEs  individuales:
 
 | Nodo | Descripción | Documentación |
 |---|---|---|
@@ -301,9 +301,6 @@ ros2 run pincher_control pincher_gui
 
 ![GUI principal](imagenes/gui_principal.png)
 
-![GUI detección activa](imagenes/gui_deteccion.png)
-
-![GUI con RViz](imagenes/gui_rviz.png)
 
 ---
 
