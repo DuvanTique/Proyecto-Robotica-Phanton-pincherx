@@ -148,7 +148,7 @@ class PincherFollowJointTrajectory(Node):
         #   ID 4:  +1  (wrist flex)    — invertido respecto al valor original
         #   ID 5:  +1  (gripper)  → en nuestro caso gripper_id (sin cambios)
         self.joint_sign = {
-            1: -1,
+            1: 1,
             2: 1,
             3: 1,
             4: 1,

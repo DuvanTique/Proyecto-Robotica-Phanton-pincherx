@@ -33,10 +33,10 @@ class CameraRecognitionNode(Node):
         self.bridge = CvBridge()
 
         # Configuración del ROI (porcentajes)
-        self.roi_x_min_pct = 0.45
-        self.roi_x_max_pct = 0.60
-        self.roi_y_min_pct = 0.62
-        self.roi_y_max_pct = 0.77
+        self.roi_x_min_pct = 0.40
+        self.roi_x_max_pct = 0.50
+        self.roi_y_min_pct = 0.05
+        self.roi_y_max_pct = 0.10
 
         # Buffer para estabilizar la detección
         self.detection_buffer = []

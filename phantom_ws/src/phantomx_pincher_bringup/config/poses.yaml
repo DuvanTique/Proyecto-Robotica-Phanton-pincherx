@@ -122,7 +122,7 @@ poses:
   caneca_verde:  # Cilindro
     x: 0.196
     y: 0.091
-    z: 0.179
+    z: 0.110
     roll: 3.142
     pitch: -0.957
     yaw: 0.433
@@ -130,7 +130,7 @@ poses:
   caneca_azul:  # Pentágono
     x: 0.192
     y: -0.088
-    z: 0.184
+    z: 0.110
     roll: 3.142
     pitch: -1.105
     yaw: -0.433

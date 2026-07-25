@@ -1,42 +1,59 @@
-# phantomx_pincher_moveit_config
+# `phantomx_pincher_moveit_config` — Configuración de MoveIt 2
 
-MoveIt configuration for PhantomX Pincher Robot Arm.
+Paquete con la configuración completa de **MoveIt 2** para el PhantomX Pincher X100: SRDF, planificador OMPL, límites articulares, solver cinemático y controladores.
 
-## Instructions
+## Grupos de Planificación
 
-### SRDF
+| Grupo | Joints | Solver |
+|---|---|---|
+| `arm` | shoulder_pan, shoulder_lift, elbow_flex, wrist_flex | KDL |
+| `gripper` | gripper_finger1, gripper_finger2 | KDL |
 
-For SRDF, [phantomx_pincher.srdf.xacro](./srdf/phantomx_pincher.srdf.xacro) is the primary descriptor that includes all other xacros and creates a configuration based on the passed arguments. To generate SRDF out of xacro, you can use the included [xacro2srdf.bash](./scripts/xacro2srdf.bash) script and modify its arguments as needed. Once executed, [phantomx_pincher.srdf](./srdf/phantomx_pincher.srdf) will automatically be replaced. Alternatively, `xacro phantomx_pincher.srdf.xacro name:="phantomx_pincher" ...` can be executed directly, e.g. this is preferred within any launch script.
+## Named Targets (SRDF)
 
-### move_group
+| Nombre | Grupo | Descripción |
+|---|---|---|
+| `up` | arm | Brazo completamente vertical |
+| `rest` | arm | Posición compacta (shoulder_lift=-90°, elbow=130°) |
+| `open` | gripper | Dedos completamente abiertos (0.0158 m) |
+| `closed` | gripper | Dedos cerrados (0.001 m) |
 
-In order to configure and setup `move_group` of MoveIt 2 to plan motions inside a simulation, [move_group.launch.py](./launch/move_group.launch.py) script can be launched or included in another launch script.
+## Archivos de Configuración
+
+```
+config/
+├── controllers_position.yaml          # Controladores de posición (joint_trajectory_controller)
+├── controllers_effort.yaml            # Controladores de esfuerzo (PID)
+├── joint_limits.yaml                  # Límites de velocidad y aceleración
+├── kinematics.yaml                    # Solver cinemático (KDL)
+├── ompl_planning.yaml                 # Planificadores OMPL disponibles
+├── servo.yaml                         # Configuración de MoveIt Servo (deshabilitado en Jazzy)
+└── moveit_controller_manager_*.yaml   # Mapeo de controladores para MoveIt
+```
+
+## Launch Files
+
+| Archivo | Uso |
+|---|---|
+| `move_group.launch.py` | Configura move_group con ros2_control, RViz y controladores |
+| `move_group_external_control.launch.py` | Versión para control externo (MoveIt Servo) |
+
+## Uso
 
 ```bash
+# Lanzar MoveIt en simulación (modo standalone)
 ros2 launch phantomx_pincher_moveit_config move_group.launch.py
+
+# Ver argumentos disponibles
+ros2 launch --show-args phantomx_pincher_moveit_config move_group.launch.py
 ```
 
-To see all arguments, please use `ros2 launch --show-args phantomx_pincher_moveit_config move_group.launch.py`.
+## Planificador OMPL
 
-## Directory Structure
+Planificadores habilitados: RRT, RRTConnect, RRTstar, PRM, LBKPIECE, BKPIECE, KPIECE, EST, BiEST, SBL, entre otros.
 
-The following directory structure is utilised for this package.
-
-```bash
-.
-├── config/                                   # [dir] Configuration files for MoveIt 2
-    ├── controllers_*.yaml                    # Configuration of ROS 2 controllers for different command interfaces
-    ├── joint_limits.yaml                     # List of velocity and acceleration joint limits
-    ├── kinematics.yaml                       # Configuration for the kinematic solver
-    ├── moveit_controller_manager_*.yaml      # List of controllers with their type and action namespace for use with MoveIt 2
-    ├── ompl_planning.yaml                    # Configuration of OMPL planning and specific planners
-    └── servo.yaml                            # Configuration for moveit_servo
-├── launch/                                   # [dir] ROS 2 launch scripts
-    ├── move_group.launch.py                  # Launch script for configuring and setting up move_group of MoveIt 2
-    └── move_group_external_control.launch.py # Launch script for configuring and setting up move_group of MoveIt 2 but with external control
-├── rviz/moveit.rviz                          # RViz2 config for motion planning with MoveIt 2
-├── scripts/                                  # [dir] Additional useful scripts
-├── srdf/                                     # [dir] SRDF description (xacros)
-├── CMakeLists.txt                            # Colcon-enabled CMake recipe
-└── package.xml                               # ROS 2 package metadata
-```
+Configuración por defecto:
+- Tiempo de planificación: 5.0 s
+- Intentos de planificación: 10
+- Tolerancia de posición: 0.005 m
+- Tolerancia de orientación: 3.14159 rad (permite cualquier orientación para 4 GDL)
