@@ -16,6 +16,8 @@ setup(
         glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'config'),
         glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config'),
+        ['config/.env.example']),
     ],
     install_requires=['setuptools', 'python-dotenv'],
     zip_safe=True,

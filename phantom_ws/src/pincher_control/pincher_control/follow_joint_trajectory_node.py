@@ -81,6 +81,11 @@ class PincherFollowJointTrajectory(Node):
         self.declare_parameter("torque_limit", 400)
         # ID del servo que mueve el gripper real
         self.declare_parameter("gripper_id", 5)
+        # Offset de calibración en grados por servo [ID 1, ID 2, ID 3, ID 4, gripper].
+        # Se aplica a todas las trayectorias antes de convertirlas a ticks.
+        self.declare_parameter(
+            "joint_offsets_degrees", [0.0, 0.0, 0.0, 0.0, 0.0]
+        )
 
         port_name = self.get_parameter("port").get_parameter_value().string_value
         baudrate = self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -88,6 +93,21 @@ class PincherFollowJointTrajectory(Node):
         moving_speed = self.get_parameter("moving_speed").get_parameter_value().integer_value
         torque_limit = self.get_parameter("torque_limit").get_parameter_value().integer_value
         gripper_id   = self.get_parameter("gripper_id").get_parameter_value().integer_value
+        joint_offsets_degrees = list(
+            self.get_parameter("joint_offsets_degrees").value
+        )
+        if len(joint_offsets_degrees) != 5:
+            self.get_logger().warn(
+                "joint_offsets_degrees debe tener 5 valores "
+                "[ID1, ID2, ID3, ID4, gripper]. Se usarán ceros."
+            )
+            joint_offsets_degrees = [0.0] * 5
+
+        servo_ids = [1, 2, 3, 4, gripper_id]
+        self.joint_offset_rad = {
+            dxl_id: math.radians(float(offset_deg))
+            for dxl_id, offset_deg in zip(servo_ids, joint_offsets_degrees)
+        }
 
         # ------------ Mapa joint_name → ID de servo Dynamixel ------------
         #
@@ -116,22 +136,31 @@ class PincherFollowJointTrajectory(Node):
             f"{prefix}gripper_finger1_joint":    gripper_id,
             f"{prefix}gripper_finger2_joint":    gripper_id,
         }
-        # Mismo convenio de signos que en control_servo.py:
-        #   ID 1:  +1  (shoulder pan)
-        #   ID 2:  -1  (shoulder lift)
-        #   ID 3:  -1  (elbow flex)
-        #   ID 4:  -1  (wrist flex)
-        #   ID 5:  +1  (gripper)  → en nuestro caso gripper_id
+        # Convenio de signos verificado en el robot real (2026-07-24):
+        #   Las 4 articulaciones del brazo se mueven en sentido contrario al
+        #   eje positivo del URDF/MoveIt. La pose en RViz coincide con la del
+        #   robot real, pero las trayectorias se ejecutaban hacia el lado
+        #   opuesto; se corrige aquí (signo del motor) y no en el URDF, para
+        #   no afectar la geometría usada por la planificación de MoveIt.
+        #   ID 1:  -1  (shoulder pan)  — invertido respecto al valor original
+        #   ID 2:  +1  (shoulder lift) — invertido respecto al valor original
+        #   ID 3:  +1  (elbow flex)    — invertido respecto al valor original
+        #   ID 4:  +1  (wrist flex)    — invertido respecto al valor original
+        #   ID 5:  +1  (gripper)  → en nuestro caso gripper_id (sin cambios)
         self.joint_sign = {
-            1:  1,
-            2: -1,
-            3: -1,
-            4: -1,
+            1: -1,
+            2: 1,
+            3: 1,
+            4: 1,
             gripper_id: 1,
         }
 
         self.get_logger().info(f"Mapa joint→ID: {self.joint_to_id}")
         self.get_logger().info(f"Signos por ID: {self.joint_sign}")
+        self.get_logger().info(
+            "Offsets de calibración (grados) por servo: "
+            f"{joint_offsets_degrees}"
+        )
 
         # Lista de joints para /joint_states:
         #   - Todas las actuadas (keys de joint_to_id).
@@ -264,12 +293,12 @@ class PincherFollowJointTrajectory(Node):
         gripper_id = self.get_parameter("gripper_id").get_parameter_value().integer_value
         
         if msg.data:
-            # OPEN: 0 degrees -> 512 ticks
-            target_tick = 512
+            # OPEN: 0 degrees -> 650 ticks
+            target_tick = 650
             self.get_logger().info("Direct Gripper: OPEN (Fast)")
         else:
-            # CLOSE: -80 degrees -> 239 ticks
-            target_tick = 239
+            # CLOSE: -80 degrees -> 610 ticks
+            target_tick = 610
             self.get_logger().info("Direct Gripper: CLOSE (Fast)")
             
         # Set high speed for this movement (e.g. 600)
@@ -472,7 +501,11 @@ class PincherFollowJointTrajectory(Node):
             if dxl_id == self.get_parameter("gripper_id").get_parameter_value().integer_value:
                  tick = self.gripper_meter_to_tick(pos_rad) # pos_rad is actually meters here
             else:
-                hw_rad = pos_rad * sign
+                # Aplicar la calibración global antes del signo del motor.
+                # Así todas las trayectorias del proyecto usan el mismo cero
+                # físico sin modificar las poses nominales de MoveIt.
+                calibration_offset = self.joint_offset_rad.get(dxl_id, 0.0)
+                hw_rad = (pos_rad + calibration_offset) * sign
                 # Convertir radianes (lado hardware) a ticks del AX-12A
                 tick = self.rad_to_dxl_tick(hw_rad)
             

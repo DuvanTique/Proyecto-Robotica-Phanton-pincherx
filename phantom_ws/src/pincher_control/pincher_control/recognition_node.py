@@ -3,15 +3,34 @@
 """
 Nodo de reconocimiento de figuras usando la API de Roboflow.
 
+IMPORTANTE (modo bajo demanda, no continuo):
+  Este nodo NO llama a la API automáticamente a una frecuencia fija.
+  Solo realiza una inferencia cuando recibe un disparo explícito en:
+    - /trigger_scan (std_msgs/Bool, data=true)
+  Ese disparo llega desde:
+    - El botón "Scan" de la GUI (solo consulta la API y muestra el
+      resultado; NO mueve el robot).
+    - El nodo clasificador, al finalizar un ciclo de pick & place
+      (para tener una detección fresca lista para el siguiente ciclo).
+  Esto evita saturar la API de Roboflow con llamadas continuas.
+
 La interfaz con el resto del sistema:
-  - Publica /figure_type cuando la detección es estable.
-  - Publica /figure_state con el estado continuo.
-  - Se pausa con /routine_busy.
+  - Publica /figure_state con el resultado de cada inferencia bajo demanda.
+  - El movimiento del robot NO depende de este nodo: la GUI decide cuándo
+    publicar /figure_type (botón Start), que es lo que escucha
+    clasificador_node para iniciar una trayectoria.
+  - Se pausa con /routine_busy (no se atienden triggers mientras una
+    rutina está en ejecución).
 
 Configuración vía parámetros ROS o variables de entorno:
   - PINCHER_API_KEY: API key de Roboflow
   - PINCHER_API_URL: URL del endpoint (opcional, se construye con model_id)
   - PINCHER_MODEL_ID: ID del modelo en Roboflow (ej: "mi-modelo/1")
+
+Las variables anteriores también se pueden definir en un archivo ".env"
+(basado en "config/.env.example") dentro del paquete pincher_control, para
+no tener que exportarlas manualmente en cada terminal. Ese archivo NUNCA
+se sube a git (ver .gitignore).
 """
 
 import os
@@ -25,6 +44,47 @@ from cv_bridge import CvBridge, CvBridgeError
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from std_msgs.msg import String, Bool, Float32MultiArray
+
+try:
+    from dotenv import load_dotenv
+    HAS_DOTENV = True
+except ImportError:
+    HAS_DOTENV = False
+
+
+def _load_pincher_env() -> None:
+    """Carga PINCHER_API_KEY / PINCHER_MODEL_ID desde un archivo .env local.
+
+    Busca ".env" en, en este orden:
+      1. share/pincher_control/config/.env (paquete instalado)
+      2. <workspace>/src/pincher_control/config/.env (desarrollo, sin instalar)
+
+    No sobreescribe variables que ya existan en el entorno (por ejemplo, si
+    el usuario las exportó manualmente antes de lanzar).
+    """
+    if not HAS_DOTENV:
+        return
+
+    candidate_paths = []
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        share_dir = get_package_share_directory("pincher_control")
+        candidate_paths.append(Path(share_dir) / "config" / ".env")
+    except Exception:
+        pass
+
+    # Fallback para ejecución directa sin instalar (p.ej. tests locales)
+    candidate_paths.append(
+        Path(__file__).resolve().parent.parent / "config" / ".env"
+    )
+
+    for env_path in candidate_paths:
+        if env_path.is_file():
+            load_dotenv(dotenv_path=env_path, override=False)
+            break
+
+
+_load_pincher_env()
 
 try:
     import requests
@@ -54,7 +114,6 @@ class RecognitionNode(Node):
         self.declare_parameter("model_id", "")
         self.declare_parameter("api_backend", "roboflow")
         self.declare_parameter("confidence_threshold", 0.7)
-        self.declare_parameter("inference_hz", 1.0)
         self.declare_parameter("publish_roi", True)
 
         # ROI centrado en la pantalla por defecto (zona cuadrada al centro)
@@ -62,10 +121,6 @@ class RecognitionNode(Node):
         self.declare_parameter("roi_x_max_pct", 0.65)
         self.declare_parameter("roi_y_min_pct", 0.35)
         self.declare_parameter("roi_y_max_pct", 0.65)
-
-        # Estabilización
-        self.declare_parameter("buffer_size", 5)
-        self.declare_parameter("vacio_reset_count", 3)
 
         # Resolver imagen topic
         image_topic = (
@@ -119,15 +174,22 @@ class RecognitionNode(Node):
         self.image_sub = self.create_subscription(
             Image, image_topic, self.image_callback, 10
         )
-        self.figure_pub = self.create_publisher(String, "/figure_type", 10)
+        # NOTA: /figure_type ya NO lo publica este nodo. Ahora la GUI decide
+        # cuándo publicarlo (botón Start), usando la última detección
+        # conocida en /figure_state.
         self.figure_state_pub = self.create_publisher(String, "/figure_state", 10)
         self.debug_pub = self.create_publisher(Image, "/camera/debug", 10)
         self.roi_pub = self.create_publisher(Image, "/camera/roi", 10)
 
         self.vision_enabled = True
-        self._was_busy = False
         self.busy_sub = self.create_subscription(
             Bool, "/routine_busy", self.busy_callback, 10
+        )
+        # Disparo explícito de una única inferencia (modo bajo demanda):
+        #   - GUI → botón "Scan" (solo consulta la API, no mueve el robot).
+        #   - clasificador_node → al finalizar un ciclo de pick & place.
+        self.trigger_scan_sub = self.create_subscription(
+            Bool, "/trigger_scan", self.trigger_scan_callback, 10
         )
         # Permite ajustar el ROI en vivo desde la GUI:
         # data = [x_min_pct, x_max_pct, y_min_pct, y_max_pct]
@@ -143,26 +205,24 @@ class RecognitionNode(Node):
         self.roi_y_min_pct = float(self.get_parameter("roi_y_min_pct").value)
         self.roi_y_max_pct = float(self.get_parameter("roi_y_max_pct").value)
 
-        # Buffer de estabilización
-        self.detection_buffer = []
-        self.buffer_size = int(self.get_parameter("buffer_size").value)
-        self.last_published_figure = ""
-        self.vacio_streak = 0
-        self.vacio_reset_count = int(self.get_parameter("vacio_reset_count").value)
+        # Última imagen recibida de la cámara (se guarda en cada frame, pero
+        # NO se envía a la API hasta que llegue un /trigger_scan explícito).
+        self._latest_frame = None
 
-        # Control de frecuencia
-        self.last_inference_time = 0.0
-        inference_hz = float(self.get_parameter("inference_hz").value)
-        inference_hz = max(inference_hz, 0.1)
-        self.inference_interval = 1.0 / inference_hz
+        # Bandera para procesar como máximo un trigger pendiente a la vez.
+        self._scan_pending = False
 
         # Estado para overlay
         self._last_detected_class = "unknown"
         self._last_confidence = 0.0
 
         self.get_logger().info(
-            f"API Recognition Node inicializado | backend={self.api_backend} | "
-            f"hz={inference_hz:.1f} | thr={self.confidence_threshold}"
+            f"API Recognition Node inicializado (modo BAJO DEMANDA) | "
+            f"backend={self.api_backend} | thr={self.confidence_threshold}"
+        )
+        self.get_logger().info(
+            "La API solo se consulta al recibir /trigger_scan "
+            "(botón Scan de la GUI o fin de ciclo del clasificador)."
         )
         self.get_logger().info(f"Suscrito a: {image_topic}")
         if self.api_url:
@@ -172,16 +232,10 @@ class RecognitionNode(Node):
     # Callbacks
     # ------------------------------------------------------------------
     def busy_callback(self, msg: Bool) -> None:
-        was_busy = self._was_busy
-        is_busy = bool(msg.data)
-        self.vision_enabled = not is_busy
-        self._was_busy = is_busy
-
-        if was_busy and not is_busy:
-            self.get_logger().info("Rutina finalizada → rearmando detección API.")
-            self.detection_buffer = []
-            self.last_published_figure = ""
-            self.vacio_streak = 0
+        """Mientras la FSM está ejecutando una rutina, se ignoran los triggers
+        de escaneo (no tiene sentido consultar la API mientras el robot se
+        está moviendo hacia una figura que ya fue recogida)."""
+        self.vision_enabled = not bool(msg.data)
 
     def roi_config_callback(self, msg: Float32MultiArray) -> None:
         """Actualiza el ROI en caliente. data = [x_min, x_max, y_min, y_max] (0.0-1.0)."""
@@ -208,11 +262,18 @@ class RecognitionNode(Node):
         )
 
     def image_callback(self, msg: Image) -> None:
+        """Guarda el último frame y publica overlays de depuración.
+
+        NO llama a la API aquí. La API solo se consulta en
+        trigger_scan_callback(), para no saturarla con llamadas continuas.
+        """
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
             self.get_logger().error(f"CvBridge Error: {e}")
             return
+
+        self._latest_frame = cv_image
 
         height, width, _ = cv_image.shape
         x_min = int(width * self.roi_x_min_pct)
@@ -221,40 +282,66 @@ class RecognitionNode(Node):
         y_max = int(height * self.roi_y_max_pct)
         roi = cv_image[y_min:y_max, x_min:x_max]
 
-        if not self.vision_enabled:
-            self._draw_and_publish(cv_image, roi, x_min, y_min, x_max, y_max)
+        self._draw_and_publish(cv_image, roi, x_min, y_min, x_max, y_max)
+
+    def trigger_scan_callback(self, msg: Bool) -> None:
+        """Realiza UNA inferencia contra la API cuando llega un trigger.
+
+        Se dispara desde:
+          - GUI (botón "Scan"): solo consulta y muestra el resultado.
+          - clasificador_node: al finalizar un ciclo, para tener una
+            detección fresca lista para el próximo Start.
+        """
+        if not msg.data:
             return
 
-        now = self.get_clock().now().nanoseconds / 1e9
-        if now - self.last_inference_time >= self.inference_interval:
-            self.last_inference_time = now
+        if not self.vision_enabled:
+            self.get_logger().warn(
+                "Trigger de escaneo ignorado: hay una rutina en ejecución "
+                "(/routine_busy = true)."
+            )
+            return
 
+        if self._latest_frame is None:
+            self.get_logger().warn(
+                "Trigger de escaneo ignorado: aún no se ha recibido ninguna "
+                "imagen de la cámara."
+            )
+            return
+
+        if self._scan_pending:
+            self.get_logger().warn(
+                "Ya hay un escaneo en curso; se ignora este trigger."
+            )
+            return
+
+        self._scan_pending = True
+        try:
+            cv_image = self._latest_frame
+            height, width, _ = cv_image.shape
+            x_min = int(width * self.roi_x_min_pct)
+            x_max = int(width * self.roi_x_max_pct)
+            y_min = int(height * self.roi_y_min_pct)
+            y_max = int(height * self.roi_y_max_pct)
+            roi = cv_image[y_min:y_max, x_min:x_max]
+
+            self.get_logger().info("📷 Trigger de escaneo recibido: consultando API...")
             detected_class, confidence = self._infer_api(roi)
             self._last_detected_class = detected_class
             self._last_confidence = confidence
 
-            # Estado continuo
+            # Estado continuo (para que la GUI muestre "última detección")
             state_msg = String()
             state_msg.data = detected_class
             self.figure_state_pub.publish(state_msg)
 
-            # Buffer de estabilización
-            if detected_class not in ("unknown", "vacio"):
-                self._update_buffer(detected_class)
-            else:
-                self.detection_buffer = []
+            self.get_logger().info(
+                f"Resultado del escaneo: {detected_class} (confianza={confidence:.2f})"
+            )
 
-            # Rearmar con vacio
-            if detected_class == "vacio":
-                self.vacio_streak += 1
-                if self.vacio_streak >= self.vacio_reset_count:
-                    if self.last_published_figure:
-                        self.get_logger().info("ROI 'vacio' estable → rearmando.")
-                    self.last_published_figure = ""
-            else:
-                self.vacio_streak = 0
-
-        self._draw_and_publish(cv_image, roi, x_min, y_min, x_max, y_max)
+            self._draw_and_publish(cv_image, roi, x_min, y_min, x_max, y_max)
+        finally:
+            self._scan_pending = False
 
     # ------------------------------------------------------------------
     # Inferencia via API
@@ -311,15 +398,27 @@ class RecognitionNode(Node):
             self.get_logger().error("No hay requests ni urllib disponible")
             return "unknown", 0.0
 
-        # Parsear respuesta de Roboflow classify
+        # Parsear respuesta de Roboflow.
+        # Puede venir en dos formatos:
+        #   - Classification: {"top": "cubo", "confidence": 0.95}
+        #   - Object Detection: {"predictions": [{"class": ..., "confidence": ...,
+        #       "x", "y", "width", "height", "detection_id"}, ...]}
+        # En Object Detection, Roboflow NO garantiza que predictions[0] sea la
+        # de mayor confianza (puede haber varios objetos en el mismo ROI), así
+        # que seleccionamos explícitamente la de mayor "confidence".
         predictions = result.get("predictions", [])
         if not predictions:
-            # Puede venir como top/confidence directamente
+            # Puede venir como top/confidence directamente (Classification)
             top_class = result.get("top", "unknown")
             confidence = float(result.get("confidence", 0.0))
         else:
-            # Lista ordenada por confianza
-            best = predictions[0]
+            if len(predictions) > 1:
+                self.get_logger().warn(
+                    f"La API devolvió {len(predictions)} detecciones en el ROI; "
+                    "se usará la de mayor confianza. Verifica que solo haya una "
+                    "figura en la zona de recolección."
+                )
+            best = max(predictions, key=lambda p: float(p.get("confidence", 0.0)))
             top_class = best.get("class", "unknown")
             confidence = float(best.get("confidence", 0.0))
 
@@ -398,20 +497,6 @@ class RecognitionNode(Node):
                 self.roi_pub.publish(self.bridge.cv2_to_imgmsg(roi, "bgr8"))
             except CvBridgeError as e:
                 self.get_logger().error(f"Error publishing ROI image: {e}")
-
-    def _update_buffer(self, shape: str) -> None:
-        self.detection_buffer.append(shape)
-        if len(self.detection_buffer) > self.buffer_size:
-            self.detection_buffer.pop(0)
-
-        if len(self.detection_buffer) == self.buffer_size:
-            if all(s == shape for s in self.detection_buffer):
-                if shape != self.last_published_figure:
-                    self.get_logger().info(f"Figura confirmada (API): {shape}")
-                    msg = String()
-                    msg.data = shape
-                    self.figure_pub.publish(msg)
-                    self.last_published_figure = shape
 
 
 def main(args=None) -> None:

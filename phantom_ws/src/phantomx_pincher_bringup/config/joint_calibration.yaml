@@ -1,0 +1,9 @@
+# Calibración global de los motores AX-12A.
+#
+# Valores en grados respecto al cero nominal del modelo ROS/MoveIt.
+# Orden: ID 1 (shoulder_pan), ID 2, ID 3, ID 4, gripper.
+# Un valor negativo hace que el motor reciba una posición menor.
+
+pincher_follow_joint_trajectory:
+  ros__parameters:
+    joint_offsets_degrees: [0.0, 0.0, 0.0, 0.0, 0.0]

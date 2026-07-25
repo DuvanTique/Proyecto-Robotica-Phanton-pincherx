@@ -127,6 +127,11 @@ class ClasificadorNode(Node):
         # Publicador de estado ocupado para pausar YOLO durante la rutina
         self.busy_pub = self.create_publisher(Bool, "/routine_busy", 10)
 
+        # Al finalizar un ciclo, se dispara un único escaneo (sin mover el
+        # robot) para tener una detección fresca lista para el siguiente
+        # ciclo, sin necesidad de llamar continuamente a la API.
+        self.trigger_scan_pub = self.create_publisher(Bool, "/trigger_scan", 10)
+
         # Suscriptor de parada de emergencia
         self.estop_sub = self.create_subscription(
             Bool,
@@ -232,6 +237,15 @@ class ClasificadorNode(Node):
         msg = Bool()
         msg.data = busy
         self.busy_pub.publish(msg)
+
+    def trigger_scan(self) -> None:
+        """Dispara una única consulta a la API de reconocimiento (sin mover
+        el robot). Se usa al finalizar cada ciclo para que la GUI tenga una
+        detección lista antes del siguiente Start."""
+        msg = Bool()
+        msg.data = True
+        self.trigger_scan_pub.publish(msg)
+        self.get_logger().info("📷 Ciclo finalizado: disparando nuevo escaneo (sin mover el robot).")
 
     # ------------------------------------------------------------------
     # Máquina de estados de la secuencia
@@ -349,8 +363,12 @@ class ClasificadorNode(Node):
             self.get_logger().info("=" * 60)
             # Forzar HOME articular exacto (todas las joints en 0 rad)
             self.send_home_joint_command()
-            # Liberar la rutina para que YOLO pueda volver a detectar nuevas figuras
+            # Liberar la rutina para que la visión pueda volver a detectar
             self.set_busy(False)
+            # Disparar un único escaneo (no mueve el robot) para tener una
+            # detección fresca lista antes de que el usuario vuelva a
+            # presionar Start, sin llamar continuamente a la API.
+            self.trigger_scan()
             self.current_state = SequenceState.IDLE
             if self.sequence_timer:
                 self.sequence_timer.cancel()

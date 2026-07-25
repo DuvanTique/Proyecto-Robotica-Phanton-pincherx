@@ -17,3 +17,9 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Credenciales locales (Roboflow API key, model id, etc.)
+# Nunca deben subirse a git. Usa config/.env.example como plantilla.
+.env
+*.env
+!*.env.example

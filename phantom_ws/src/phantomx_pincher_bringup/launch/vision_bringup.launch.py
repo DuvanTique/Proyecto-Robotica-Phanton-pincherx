@@ -50,10 +50,9 @@ def generate_launch_description():
         "framerate", default_value="30.0",
         description="FPS de la cámara.",
     )
-    inference_hz_arg = DeclareLaunchArgument(
-        "inference_hz", default_value="1.0",
-        description="Frecuencia de llamadas a la API (Hz). Recomendado <= 2.0 por latencia.",
-    )
+    # NOTA: recognition_node ya NO llama a la API a una frecuencia fija.
+    # Solo consulta la API cuando recibe /trigger_scan (botón "Scan" de la
+    # GUI o fin de ciclo del clasificador), para no saturar Roboflow.
     start_clasificador_arg = DeclareLaunchArgument(
         "start_clasificador", default_value="false",
         description="Iniciar nodo clasificador.",
@@ -84,7 +83,6 @@ def generate_launch_description():
     image_width = LaunchConfiguration("image_width")
     image_height = LaunchConfiguration("image_height")
     framerate = LaunchConfiguration("framerate")
-    inference_hz = LaunchConfiguration("inference_hz")
     start_clasificador = LaunchConfiguration("start_clasificador")
     roi_x_min_pct = LaunchConfiguration("roi_x_min_pct")
     roi_x_max_pct = LaunchConfiguration("roi_x_max_pct")
@@ -123,7 +121,6 @@ def generate_launch_description():
             "api_backend": api_backend,
             "image_topic": image_topic_env,
             "confidence_threshold": 0.70,
-            "inference_hz": inference_hz,
             "publish_roi": True,
             "roi_x_min_pct": roi_x_min_pct,
             "roi_x_max_pct": roi_x_max_pct,
@@ -151,7 +148,6 @@ def generate_launch_description():
         image_width_arg,
         image_height_arg,
         framerate_arg,
-        inference_hz_arg,
         start_clasificador_arg,
         roi_x_min_arg,
         roi_x_max_arg,

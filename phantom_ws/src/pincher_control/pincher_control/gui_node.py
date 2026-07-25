@@ -90,6 +90,10 @@ class GuiRosNode(Node):
         # Publisher para ajustar el ROI de detección en vivo
         self.roi_config_pub = self.create_publisher(Float32MultiArray, "/roi_config", 10)
 
+        # Dispara una única consulta a la API de reconocimiento (botón Scan).
+        # NO mueve el robot; solo actualiza /figure_state con el resultado.
+        self.trigger_scan_pub = self.create_publisher(Bool, "/trigger_scan", 10)
+
         # Subscribers
         self.figure_state_sub = self.create_subscription(
             String, "/figure_state", self._figure_state_cb, 10
@@ -133,9 +137,18 @@ class GuiRosNode(Node):
             pass
 
     def publish_figure(self, figure: str):
+        """Publica /figure_type: esto es lo único que hace que el robot se
+        mueva (clasificador_node arranca su FSM al recibir este mensaje)."""
         msg = String()
         msg.data = figure
         self.figure_pub.publish(msg)
+
+    def publish_trigger_scan(self):
+        """Dispara una única consulta a la API (botón Scan). No mueve el
+        robot; solo actualiza /figure_state con el resultado."""
+        msg = Bool()
+        msg.data = True
+        self.trigger_scan_pub.publish(msg)
 
     def publish_home(self):
         """Envía joint_command con articulaciones en posición home (1°)."""
@@ -358,11 +371,26 @@ class PincherGUI:
     # Control Callbacks
     # =========================================================================
     def _on_start(self):
+        """Inicia el ciclo automático: el robot solo se mueve al presionar
+        este botón. Usa la última detección disponible en /figure_state
+        (obtenida con Scan o al finalizar el ciclo anterior)."""
+        if self.is_fault:
+            self.status_var.set("⚠️  Sistema en FAULT. Haga Reset primero.")
+            return
+
+        detected = self.node.current_figure_state
+        if detected not in FIGURE_MAP:
+            self.status_var.set(
+                f"⚠️  No hay una detección válida (actual: {detected}). "
+                "Presione Scan primero."
+            )
+            return
+
         self.auto_mode = True
-        self.is_fault = False
-        self.fsm_state = "SCAN"
-        self.status_var.set("Modo automático iniciado. Esperando detección...")
+        self.fsm_state = "PLAN"
         self._update_state_display()
+        self.node.publish_figure(detected)
+        self.status_var.set(f"▶ Start: iniciando pick & place para {detected}...")
 
     def _on_stop(self):
         self.auto_mode = False
@@ -399,12 +427,16 @@ class PincherGUI:
         self.status_var.set("🏠 Robot enviado a posición HOME.")
 
     def _on_scan(self):
+        """Dispara una única consulta a la API de Roboflow y muestra el
+        resultado. NO mueve el robot. Para iniciar el movimiento, use Start."""
         if self.is_fault:
             self.status_var.set("⚠️  Sistema en FAULT. Haga Reset primero.")
             return
-        self.fsm_state = "SCAN"
-        self.status_var.set("Capturando imagen... esperando detección de la API.")
-        self._update_state_display()
+        if self.node.is_busy:
+            self.status_var.set("⚠️  Hay una rutina en ejecución. Espere a que termine.")
+            return
+        self.node.publish_trigger_scan()
+        self.status_var.set("📷 Escaneando... consultando la API de Roboflow.")
 
     def _on_next_cube(self):
         """Modo paso a paso: clasifica la siguiente figura detectada."""
@@ -465,11 +497,14 @@ class PincherGUI:
         detected = self.node.current_figure_state
         self.detection_var.set(detected if detected else "---")
 
-        # Update FSM state based on busy — but only if GUI is in auto/active mode
+        # Update FSM state based on busy — but only si la GUI inició un ciclo
         if self.node.is_busy and self.fsm_state not in ("FAULT", "DONE", "IDLE"):
             self.fsm_state = "PICK"
         elif not self.node.is_busy and self.fsm_state == "PICK":
-            self.fsm_state = "SCAN" if self.auto_mode else "IDLE"
+            # El ciclo terminó. clasificador_node ya disparó un nuevo
+            # /trigger_scan automáticamente; aquí solo reflejamos el estado.
+            self.fsm_state = "IDLE"
+            self.auto_mode = False
             # Incrementar conteo si se completó
             if detected in FIGURE_MAP:
                 self.classified_count[detected] = min(
@@ -508,13 +543,6 @@ class PincherGUI:
 
         # Update camera image
         self._update_camera_image()
-
-        # Auto-mode: trigger next cube ONLY when in SCAN state and not busy
-        if self.auto_mode and self.fsm_state == "SCAN" and not self.node.is_busy and not self.is_fault:
-            if detected in FIGURE_MAP and self.classified_count[detected] < RECIPE[detected]:
-                self.node.publish_figure(detected)
-                self.fsm_state = "PLAN"
-                self.status_var.set(f"Auto: clasificando {detected}...")
 
         self.root.after(200, self._update_display)
 

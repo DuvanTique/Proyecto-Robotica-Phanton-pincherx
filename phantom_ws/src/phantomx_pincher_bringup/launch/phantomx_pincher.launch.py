@@ -26,6 +26,7 @@ def generate_launch_description():
     use_real_robot = LaunchConfiguration("use_real_robot")
     start_clasificador = LaunchConfiguration("start_clasificador")
     enable_rviz = LaunchConfiguration("enable_rviz")
+    port = LaunchConfiguration("port")
 
     use_real_robot_arg = DeclareLaunchArgument(
         "use_real_robot",
@@ -53,6 +54,15 @@ def generate_launch_description():
         description="Si es 'false', no arranca RViz (útil para ejecución headless en Raspberry Pi).",
     )
 
+    port_arg = DeclareLaunchArgument(
+        "port",
+        default_value="/dev/ttyUSB0",
+        description=(
+            "Puerto serie del adaptador Dynamixel/U2D2 en modo robot real "
+            "(por ejemplo /dev/ttyUSB0 o /dev/ttyUSB1)."
+        ),
+    )
+
     # -------------------------------------------------------------------------
     #  Paths (shared)
     # -------------------------------------------------------------------------
@@ -66,6 +76,14 @@ def generate_launch_description():
         FindPackageShare("phantomx_pincher_moveit_config"),
         "launch",
         "move_group.launch.py",
+    ])
+
+    # Calibración global de los servos reales. El archivo se aplica únicamente
+    # al nodo de hardware; la simulación conserva las coordenadas nominales.
+    joint_calibration_file = PathJoinSubstitution([
+        FindPackageShare("phantomx_pincher_bringup"),
+        "config",
+        "joint_calibration.yaml",
     ])
 
     # Define ros2_control_plugin based on use_real_robot
@@ -216,15 +234,10 @@ def generate_launch_description():
         executable="follow_joint_trajectory",
         name="pincher_follow_joint_trajectory",
         output="screen",
-        # Optional: override defaults if needed
-        # parameters=[{
-        #     "port": "/dev/ttyUSB0",
-        #     "baudrate": 1000000,
-        #     "joint_prefix": "phantomx_pincher_",
-        #     "moving_speed": 200,
-        #     "torque_limit": 400,
-        #     "gripper_id": 5,
-        # }],
+        parameters=[
+            joint_calibration_file,
+            {"port": port},
+        ],
         condition=IfCondition(use_real_robot),
     )
 
@@ -251,6 +264,7 @@ def generate_launch_description():
         use_real_robot_arg,
         start_clasificador_arg,
         enable_rviz_arg,
+        port_arg,
 
         # Common
         robot_state_publisher_node,

@@ -97,13 +97,18 @@ ros2 topic pub -1 /figure_type std_msgs/msg/String "{data: 'rectangulo'}"
 
 ### Robot real
 
+El puerto USB se puede seleccionar directamente desde el launch. Por ejemplo, si el U2D2 aparece como `/dev/ttyUSB1`:
+
 ```bash
 ros2 launch phantomx_pincher_bringup phantomx_pincher.launch.py \
   use_real_robot:=true \
-  start_clasificador:=true
+  start_clasificador:=true \
+  port:=/dev/ttyUSB1
 ```
 
-> **Nota:** El robot debe estar conectado por USB. Verificar con `ls /dev/ttyUSB*`
+Si no se indica `port`, el valor predeterminado es `/dev/ttyUSB0`.
+
+> **Nota:** El robot debe estar conectado por USB. Verifica el dispositivo con `ls -l /dev/ttyUSB* /dev/ttyACM*`.
 
 ### Interfaz gráfica (GUI)
 
@@ -120,12 +125,57 @@ La GUI permite:
 - Control manual del gripper
 - Ver estado de la FSM y conteo de figuras
 
+#### Botones Scan y Start (importante)
+
+Para no saturar la API de Roboflow con llamadas continuas, `recognition_node` **no** consulta la API automáticamente. Solo lo hace bajo demanda:
+
+- **📷 Scan**: consulta la API de Roboflow **una sola vez** y muestra el resultado en la GUI. **No mueve el robot.**
+- **▶ Start**: usa la última detección mostrada (obtenida con Scan) para arrancar la secuencia de pick & place. **Esto es lo único que hace que el robot empiece a moverse.**
+
+Al finalizar cada ciclo, el clasificador dispara automáticamente un nuevo escaneo (sin mover el robot), para que la siguiente figura ya esté detectada antes de presionar Start otra vez.
+
 ### Visión con Roboflow
+
+#### Opción A (recomendada): archivo .env local, sin exportar variables cada vez
+
+1. Copia la plantilla y complétala con tus credenciales reales:
+
+```bash
+cd ~/ros2_jazzy/robotica-proyecto-final/phantom_ws/src/pincher_control/config
+cp .env.example .env
+nano .env
+```
+
+2. Edita `.env` con tu API key y tu modelo:
+
+```bash
+PINCHER_API_KEY=tu_api_key_real
+PINCHER_MODEL_ID=tu-proyecto/1
+PINCHER_API_BACKEND=roboflow
+```
+
+3. Recompila para que el archivo quede disponible en `install/`:
+
+```bash
+cd ~/ros2_jazzy/robotica-proyecto-final/phantom_ws
+./build.sh
+source install/setup.bash
+```
+
+El nodo `recognition_node` carga automáticamente `.env` al iniciar. No necesitas exportar nada manualmente en cada terminal.
+
+`.env` está protegido en `.gitignore` y nunca se sube al repositorio. Solo `.env.example` (sin credenciales reales) se versiona en git, para que cualquier persona que clone el proyecto sepa qué variables debe configurar.
+
+#### Opción B: variables de entorno manuales (sesión actual)
 
 ```bash
 export PINCHER_API_KEY="tu_api_key"
 export PINCHER_MODEL_ID="tu-proyecto/1"
+```
 
+#### Lanzar el sistema de visión
+
+```bash
 ros2 launch phantomx_pincher_bringup vision_bringup.launch.py \
   start_camera:=true \
   camera_device:=/dev/video0 \
@@ -164,8 +214,9 @@ phantom_ws/src/
 | Tópico | Tipo | Función |
 |--------|------|---------|
 | `/pose_command` | PoseCommand | Enviar pose objetivo al commander |
-| `/figure_type` | String | Figura detectada → inicia pick & place |
-| `/figure_state` | String | Estado continuo de la detección |
+| `/figure_type` | String | Figura confirmada por Start/Next → inicia pick & place (el robot se mueve) |
+| `/figure_state` | String | Última detección conocida (actualizada solo tras un `/trigger_scan`) |
+| `/trigger_scan` | Bool | Dispara una única consulta a la API de Roboflow (sin mover el robot) |
 | `/joint_states` | JointState | Estado articular del robot |
 | `/set_gripper` | Bool | Control directo del gripper (True=abrir) |
 | `/routine_busy` | Bool | FSM ocupada (pausa visión) |
@@ -183,6 +234,39 @@ phantom_ws/src/
 
 ## Configuración del robot real
 
+### Calibración global de articulaciones
+
+La calibración de los motores reales se centraliza en:
+
+```text
+phantom_ws/src/phantomx_pincher_bringup/config/joint_calibration.yaml
+```
+
+El primer valor corresponde a la primera articulación, motor Dynamixel ID 1:
+
+```yaml
+joint_offsets_degrees: [-2.0, 0.0, 0.0, 0.0, 0.0]
+```
+
+El valor `-2.0` hace que la primera articulación reciba siempre 2° menos que la posición nominal solicitada por MoveIt. Esto afecta Home, pick, drop, el clasificador y cualquier trayectoria enviada al nodo `follow_joint_trajectory` en modo real. No es necesario modificar individualmente las poses ni los botones de la GUI.
+
+Orden de los valores:
+
+```text
+[ID 1, ID 2, ID 3, ID 4, gripper]
+```
+
+Para modificar la calibración, cambia únicamente el valor correspondiente. Por ejemplo, `-1.5` aplica 1.5° menos al motor ID 1. Después recompila:
+
+```bash
+cd ~/ros2_jazzy/robotica-proyecto-final/phantom_ws
+source /opt/ros/jazzy/setup.bash
+./build.sh
+source install/setup.bash
+```
+
+La calibración se aplica al hardware real; la simulación y las poses nominales de MoveIt permanecen sin offset para que la planificación y la visualización sigan usando el mismo modelo geométrico.
+
 ### Permisos del puerto USB
 
 ```bash
@@ -196,13 +280,19 @@ sudo usermod -aG dialout $USER
 ls /dev/ttyUSB*
 ```
 
-### Si el puerto es diferente de /dev/ttyUSB0
+### Seleccionar el puerto desde el comando
 
-Editar los parámetros en `phantomx_pincher.launch.py` (sección `follow_joint_trajectory_node`) o crear un symlink:
+No es necesario renombrar `/dev/ttyUSB1` a `/dev/ttyUSB0`. El puerto se puede pasar al launch:
 
 ```bash
-sudo ln -sf /dev/ttyUSB1 /dev/ttyUSB0
+ros2 launch phantomx_pincher_bringup phantomx_pincher.launch.py \
+  use_real_robot:=true \
+  start_clasificador:=true \
+  port:=/dev/ttyUSB1
 ```
+
+El valor predeterminado sigue siendo `/dev/ttyUSB0`.
+
 
 ## Solución de problemas
 
@@ -227,12 +317,14 @@ ros2 topic pub -1 /joint_command example_interfaces/msg/Float64MultiArray "{data
 
 ### El brazo se mueve "al revés"
 
-Verificar `joint_signs` en `follow_joint_trajectory_node.py`. Para AX-12A:
-- ID 1 (shoulder pan): +1
-- ID 2 (shoulder lift): -1
-- ID 3 (elbow flex): -1
-- ID 4 (wrist flex): -1
+Verificar `joint_sign` en `follow_joint_trajectory_node.py`. Convenio verificado en el robot real:
+- ID 1 (shoulder pan): -1
+- ID 2 (shoulder lift): +1
+- ID 3 (elbow flex): +1
+- ID 4 (wrist flex): +1
 - ID 5 (gripper): +1
+
+Si RViz muestra la misma orientación que el robot real pero las trayectorias se ejecutan hacia el lado contrario, el problema es el signo del motor (no el URDF ni las poses). Cambia únicamente `joint_sign` del ID correspondiente y recompila.
 
 ## Configuración de Roboflow
 

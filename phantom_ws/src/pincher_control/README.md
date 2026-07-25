@@ -19,13 +19,15 @@ Este paquete agrupa todos los nodos de control de bajo y alto nivel para el Phan
 #### 2. `clasificador_node.py` (`clasificador_node`)
 
 - Máquina de estados de alto nivel para **pick & place** basado en el tipo de figura detectada.
+- El robot SOLO se mueve al recibir `/figure_type`. Ese mensaje lo publica la GUI cuando el usuario presiona **Start** (o **Next**), nunca automáticamente por una detección continua de la API.
 - Suscripciones:
   - `/figure_type` (`std_msgs/String`): tipos `cubo`, `cilindro`, `pentagono`, `rectangulo`.
 - Publicaciones:
   - `/pose_command` (`phantomx_pincher_interfaces/PoseCommand`): órdenes de pose para `commander`.
   - `/set_gripper` (`std_msgs/Bool`): abre/cierra el gripper mediante `follow_joint_trajectory_node`.
-  - `/routine_busy` (`std_msgs/Bool`): indica si la FSM está ejecutando una rutina (usado por YOLO para pausar la visión).
+  - `/routine_busy` (`std_msgs/Bool`): indica si la FSM está ejecutando una rutina (usado por `recognition_node` para pausar la visión).
   - `/joint_command` (`example_interfaces/Float64MultiArray`): al final de la rutina envía `[0,0,0,0]` para asegurar HOME articular exacto.
+  - `/trigger_scan` (`std_msgs/Bool`): al finalizar cada ciclo, dispara **una sola** consulta a la API (sin mover el robot) para tener una detección fresca lista antes del siguiente Start.
 - Estados principales (simplificado):
   - HOME inicial → `recoleccion_1` → abrir gripper → `recoleccion_2` → cerrar gripper → retorno a `recoleccion_1` → `caneca_X` → abrir gripper → HOME final.
 - Usa tiempos `TIME_MOVEMENT` y `TIME_GRIPPER` para secuenciar los pasos sin saturar MoveIt.
@@ -105,14 +107,31 @@ El modelo resultante (`runs/classify/yolo_shapes_long/weights/best.pt`) puede us
 export PINCHER_YOLO_MODEL=$PWD/runs/classify/yolo_shapes_long/weights/best.pt
 ```
 
-### Flujo completo de pick & place (resumen)
+### Flujo completo de pick & place (resumen, modo bajo demanda con Roboflow)
 
-1. `usb_cam` publica imágenes en `/image_raw`.
-2. `yolo_recognition_node` infiere cada `1 / inference_hz` s sobre el ROI y, cuando hay detección estable, publica `/figure_type`.
-3. `clasificador_node` recibe `/figure_type` y, si no está ejecutando nada, arranca la FSM:
-   - Publica secuencialmente poses a `/pose_command` y órdenes de gripper a `/set_gripper`.
-   - Publica `/routine_busy:=true` mientras dura la rutina, de forma que YOLO pausa nuevas inferencias.
-4. Al finalizar la rutina:
-   - `clasificador_node` envía `joint_command [0,0,0,0]` para garantizar HOME articular exacto.
-   - Publica `/routine_busy:=false`, rearmando la lógica de detección en YOLO.
-5. El sistema queda listo para detectar y clasificar la siguiente figura.
+Este flujo evita saturar la API de Roboflow: la API solo se consulta bajo
+demanda (`/trigger_scan`), nunca a una frecuencia fija continua.
+
+1. `usb_cam` publica imágenes en `/image_raw`. `recognition_node` las recibe
+   y las guarda (solo actualiza el overlay de depuración), pero **no** llama
+   a la API todavía.
+2. El usuario presiona **Scan** en la GUI → se publica `/trigger_scan`.
+   `recognition_node` realiza **una única** inferencia contra la API y
+   publica el resultado en `/figure_state` (esto NO mueve el robot).
+3. El usuario revisa el resultado mostrado en la GUI y presiona **Start**.
+   Solo en ese momento la GUI publica `/figure_type` con la última detección
+   conocida, y **eso es lo que hace que el robot empiece a moverse**.
+4. `clasificador_node` recibe `/figure_type` y arranca la FSM:
+   - Publica secuencialmente poses a `/pose_command` y órdenes de gripper a
+     `/set_gripper`.
+   - Publica `/routine_busy:=true` mientras dura la rutina (pausa cualquier
+     escaneo entrante).
+5. Al finalizar la rutina:
+   - `clasificador_node` envía `joint_command [0,0,0,0]` para garantizar HOME
+     articular exacto.
+   - Publica `/routine_busy:=false`.
+   - Publica `/trigger_scan:=true` automáticamente, para que la siguiente
+     figura ya esté detectada cuando el usuario presione Start de nuevo
+     (sin necesidad de presionar Scan manualmente cada vez).
+6. El sistema queda listo para clasificar la siguiente figura con un nuevo
+   Start.
